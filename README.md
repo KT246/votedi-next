@@ -1,36 +1,141 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# votedi-next
+
+`votedi-next` is a voting platform built with Next.js. It provides admin and user workflows for managing rooms, importing candidates, collecting votes, and reviewing results.
+
+## Features
+
+- Admin authentication with JWT
+- Single-admin setup
+- User CRUD with CSV import
+- Vote room CRUD
+- Candidate import from CSV
+- Multi-select voting
+- Vote countdown and room closing logic
+- Result visibility after a room closes
+- Optional Socket.IO real-time updates
+
+## Tech Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- MongoDB
+- JWT
+- Zustand
+- Tailwind CSS
+- Socket.IO (optional)
+
+## Project Structure
+
+- `src/app` - App Router pages and API routes
+- `src/pages` - Legacy user-facing pages kept during migration
+- `src/components` - Shared UI components
+- `src/store` - Client state stores
+- `src/lib` - Database and lifecycle helpers
+- `scripts` - Utility scripts such as admin seeding and migration helpers
+
+## Prerequisites
+
+- Node.js 20 or newer
+- MongoDB running locally or a remote MongoDB connection
+
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+MONGODB_URI=mongodb://localhost:27017/votedi
+JWT_SECRET=your-secret-key
+NEXT_PUBLIC_SOCKET_URL=
+```
+
+Optional values used by the admin seed script:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
+ADMIN_FULL_NAME=Administrator
+```
 
 ## Getting Started
 
-First, run the development server:
+```bash
+npm install
+npm run dev
+```
+
+Open the app at:
+
+- `http://localhost:3000/admin/login`
+- `http://localhost:3000/login`
+- `http://localhost:3000/my-rooms`
+
+## Available Scripts
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm run start
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Seed the Admin Account
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+If you need to create or reset the single admin account, run:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+node scripts/create-admin.js
+```
 
-## Learn More
+## CSV Formats
 
-To learn more about Next.js, take a look at the following resources:
+### Users
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+User import expects:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```csv
+username,fullName,studentId
+```
 
-## Deploy on Vercel
+- `studentId` is used as the initial password.
+- Users should change their password after first login.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Candidates
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Candidate import expects:
+
+```csv
+name,title,date,bio,avatar
+```
+
+- `bio` must be separated by semicolons in the CSV.
+- `avatar` should be a direct image URL and is stored as-is.
+
+Example:
+
+```csv
+name,title,date,bio,avatar
+Jane Doe,Project Manager,2026-03-31,"Achievement 1; Achievement 2",https://example.com/avatar.png
+```
+
+## Main Routes
+
+- `/admin` - Admin dashboard
+- `/admin/login` - Admin login
+- `/admin/users` - User management
+- `/admin/vote-rooms` - Vote room management
+- `/admin/vote-rooms/[roomId]` - Vote room details
+- `/login` - User login
+- `/my-rooms` - User rooms
+- `/vote-room/[roomCode]` - Voting room
+- `/vote-room/[roomCode]/result` - Room results
+
+## Notes
+
+- Socket.IO is optional. If `NEXT_PUBLIC_SOCKET_URL` is not set, the app runs without websocket connections.
+- The project currently contains both App Router and legacy Pages Router code during migration.
+- Room lifecycle logic is handled server-side so open, draft, and closed states stay consistent.
+
+## License
+
+Private project.
