@@ -17,6 +17,7 @@ import ErrorState from "../components/ui/ErrorState";
 import EmptyState from "../components/ui/EmptyState";
 import StatusBadge from "../components/ui/StatusBadge";
 import { useRoomSocket } from "../hooks/useRoomSocket";
+import RoomCountdownBanner from "../components/RoomCountdownBanner";
 
 function normalizeId(raw: unknown): string {
   if (!raw) return "";
@@ -40,18 +41,25 @@ function normalizeId(raw: unknown): string {
   return String(raw);
 }
 
-function formatCountdown(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+function resolveCountdownTargetMs(roomInfo: {
+  endTime?: string | null;
+  startTime?: string | null;
+  durationMinutes?: number | null;
+} | null): number | null {
+  if (!roomInfo) return null;
+  if (roomInfo.endTime) {
+    const parsed = Date.parse(roomInfo.endTime);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
 
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours} ຊົ່ວໂມງ`);
-  if (minutes > 0 || hours > 0) parts.push(`${minutes} ນາທີ`);
-  parts.push(`${seconds} ວິນາທີ`);
+  if (roomInfo.startTime && roomInfo.durationMinutes) {
+    const parsedStart = Date.parse(roomInfo.startTime);
+    if (!Number.isNaN(parsedStart)) {
+      return parsedStart + roomInfo.durationMinutes * 60 * 1000;
+    }
+  }
 
-  return parts.join(' ');
+  return null;
 }
 
 function RoomStatePanel({
@@ -110,7 +118,6 @@ export default function VoteRoomPage() {
   );
   const [checkedInRoomCode, setCheckedInRoomCode] = useState("");
   const [checkInError, setCheckInError] = useState("");
-  const [nowTs, setNowTs] = useState(() => Date.now());
 
   function toApiErrorMessage(err: unknown) {
     const typedErr = err as {
@@ -142,11 +149,6 @@ export default function VoteRoomPage() {
   useEffect(() => {
     if (roomCode) loadRoom(roomCode);
   }, [roomCode, loadRoom]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowTs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     setCheckedInRoomCode("");
@@ -213,44 +215,25 @@ export default function VoteRoomPage() {
     }
   }, [roomInfo?.status, roomCode, router]);
 
-  const countdownTargetMs = (() => {
-    if (!roomInfo) return null;
-    if (roomInfo.endTime) {
-      const parsed = Date.parse(roomInfo.endTime);
-      return Number.isNaN(parsed) ? null : parsed;
-    }
-
-    if (roomInfo.startTime && roomInfo.durationMinutes) {
-      const parsedStart = Date.parse(roomInfo.startTime);
-      if (!Number.isNaN(parsedStart)) {
-        return parsedStart + roomInfo.durationMinutes * 60 * 1000;
-      }
-    }
-
-    return null;
-  })();
-
-  const countdownRemainingMs = countdownTargetMs
-    ? Math.max(0, countdownTargetMs - nowTs)
-    : null;
-  const countdownLabel =
-    countdownRemainingMs !== null ? formatCountdown(countdownRemainingMs) : '';
+  const countdownTargetMs = resolveCountdownTargetMs(roomInfo);
 
   useEffect(() => {
-    if (
-      !roomCode ||
-      roomInfo?.status !== "open" ||
-      countdownRemainingMs === null
-    )
+    if (!roomCode || roomInfo?.status !== "open" || countdownTargetMs === null) {
       return;
-    if (countdownRemainingMs > 0) return;
+    }
 
-    const refreshTimer = window.setInterval(() => {
+    const remainingMs = countdownTargetMs - Date.now();
+    if (remainingMs <= 0) {
       void loadRoom(roomCode);
-    }, 5000);
+      return;
+    }
 
-    return () => window.clearInterval(refreshTimer);
-  }, [countdownRemainingMs, loadRoom, roomCode, roomInfo?.status]);
+    const refreshTimer = window.setTimeout(() => {
+      void loadRoom(roomCode);
+    }, remainingMs + 250);
+
+    return () => window.clearTimeout(refreshTimer);
+  }, [countdownTargetMs, loadRoom, roomCode, roomInfo?.status]);
 
   useEffect(() => {
     if (!roomCode || roomInfo?.status !== "open") return;
@@ -354,10 +337,12 @@ export default function VoteRoomPage() {
       <div className="min-h-screen bg-slate-50">
         <RoomHeader />
         <div className="mx-auto max-w-lg px-4 py-4">
-          {roomInfo.status === 'open' && countdownRemainingMs !== null ? (
-            <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-center text-sm font-semibold text-indigo-700">
-              {'ນັບຖອຍຫຼັງ:'} {countdownLabel}
-            </div>
+          {roomInfo.status === "open" ? (
+            <RoomCountdownBanner
+              endTime={roomInfo.endTime}
+              startTime={roomInfo.startTime}
+              durationMinutes={roomInfo.durationMinutes}
+            />
           ) : null}
           <VoteStatusCard
             voteRecord={voteRecord}
@@ -420,11 +405,11 @@ export default function VoteRoomPage() {
       <RoomHeader />
 
       <div className="mx-auto max-w-lg px-4 py-4">
-        {countdownRemainingMs !== null ? (
-          <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-center text-sm font-semibold text-indigo-700">
-            {'ນັບຖອຍຫຼັງ:'} {countdownLabel}
-          </div>
-        ) : null}
+        <RoomCountdownBanner
+          endTime={roomInfo.endTime}
+          startTime={roomInfo.startTime}
+          durationMinutes={roomInfo.durationMinutes}
+        />
 
         <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-600">
           {roomInfo.description}

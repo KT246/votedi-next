@@ -16,7 +16,18 @@ interface VoteRoomState {
     resetRoom: () => void;
 }
 
-export const useVoteRoomStore = create<VoteRoomState>((set) => ({
+type LegacyVoteEntry = {
+    userId?: unknown;
+    candidateId?: unknown;
+    votedAt?: unknown;
+};
+
+type ApiError = {
+    response?: { data?: { message?: unknown }; status?: number };
+    message?: string;
+};
+
+export const useVoteRoomStore = create<VoteRoomState>((set, get) => ({
     roomInfo: null,
     candidates: [],
     roomLoading: false,
@@ -25,7 +36,12 @@ export const useVoteRoomStore = create<VoteRoomState>((set) => ({
     voteRecord: null,
 
     loadRoom: async (roomCode: string, options?: { silent?: boolean }) => {
-        const silent = Boolean(options?.silent);
+        const normalizedRoomCode = String(roomCode || '').trim();
+        const currentState = get();
+        const shouldReuseCurrentRoom =
+            !!currentState.roomInfo &&
+            String(currentState.roomInfo.roomCode || '').trim() === normalizedRoomCode;
+        const silent = Boolean(options?.silent || shouldReuseCurrentRoom);
         if (!silent) {
             set({
                 roomLoading: true,
@@ -33,11 +49,12 @@ export const useVoteRoomStore = create<VoteRoomState>((set) => ({
                 roomNotFound: false,
                 candidates: [],
                 roomInfo: null,
+                voteRecord: null,
             });
         }
 
         try {
-            const res = await apiClient.get(`/rooms/code/${roomCode}`);
+            const res = await apiClient.get(`/rooms/code/${normalizedRoomCode}`);
             const data = res.data;
             if (!data) throw new Error('Room not found');
 
@@ -55,15 +72,20 @@ export const useVoteRoomStore = create<VoteRoomState>((set) => ({
                     selectedIds: data.myVote.selectedIds,
                     submittedAt: data.myVote.votedAt,
                 } as VoteRecord;
-            } else if (user && data.votes) {
-                const myVotes = data.votes.filter((v: any) => v.userId === user.id);
+            } else if (user && Array.isArray(data.votes)) {
+                const myVotes = data.votes.filter((vote: unknown) => {
+                    const typedVote = vote as LegacyVoteEntry;
+                    return String(typedVote.userId || '') === user.id;
+                }) as LegacyVoteEntry[];
                 if (myVotes.length > 0) {
                     record = {
                         id: `v${Date.now()}`,
                         userId: user.id,
                         roomId: room.id,
-                        selectedIds: myVotes.map((v: any) => v.candidateId),
-                        submittedAt: myVotes[0].votedAt,
+                        selectedIds: myVotes
+                            .map((vote) => String(vote.candidateId || '').trim())
+                            .filter(Boolean),
+                        submittedAt: String(myVotes[0].votedAt || ''),
                     } as VoteRecord;
                 }
             }
@@ -75,9 +97,15 @@ export const useVoteRoomStore = create<VoteRoomState>((set) => ({
                 roomNotFound: false,
                 roomError: null,
             });
-        } catch (err: any) {
-            const message = err?.response?.data?.message || err.message || 'Room load failed.';
-            const isNotFound = err?.response?.status === 404 || /not found|khong tim thay|bo khong co/i.test(String(message).toLowerCase());
+        } catch (err: unknown) {
+            const typedErr = err as ApiError;
+            const message =
+                (typeof typedErr?.response?.data?.message === 'string' && typedErr.response.data.message) ||
+                typedErr?.message ||
+                'Room load failed.';
+            const isNotFound =
+                typedErr?.response?.status === 404 ||
+                /not found|khong tim thay|bo khong co/i.test(String(message).toLowerCase());
             if (!silent) {
                 set({ roomError: message, roomNotFound: isNotFound });
             }

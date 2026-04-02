@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
 import { getAuthContext } from '@/lib/serverAuth';
-import { normalizeText, serializeUser, type UserDocument } from '@/lib/userAuth';
+import { normalizeText, serializeManagedUser, type UserDocument } from '@/lib/userAuth';
 
 type ImportRow = {
     username?: unknown;
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
             const insertedIds = Object.values(result.insertedIds);
             const insertedUsers = await users.find({ _id: { $in: insertedIds } }).toArray();
             return NextResponse.json({
-                created: insertedUsers.map(serializeUser),
+                created: insertedUsers.map(serializeManagedUser),
                 skipped,
             });
         }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
 import { getAuthContext } from '@/lib/serverAuth';
-import { normalizeText, serializeUser, type UserDocument } from '@/lib/userAuth';
+import { normalizeText, serializeManagedUser, type UserDocument } from '@/lib/userAuth';
 
 function normalizeUsername(value: unknown): string {
     return normalizeText(value).toLowerCase();
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
         .sort({ createdAt: -1 })
         .toArray();
 
-    return NextResponse.json(users.map(serializeUser));
+    return NextResponse.json(users.map(serializeManagedUser));
 }
 
 export async function POST(request: NextRequest) {
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         });
 
         const created = await users.findOne({ _id: result.insertedId });
-        return NextResponse.json(created ? serializeUser(created) : null, { status: 201 });
+        return NextResponse.json(created ? serializeManagedUser(created) : null, { status: 201 });
     } catch (error) {
         console.error('Create user error:', error);
         return NextResponse.json({ message: 'Failed to create user' }, { status: 500 });

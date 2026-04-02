@@ -31,10 +31,16 @@ function normalizeId(raw: unknown): string {
     return String(raw);
 }
 
+function normalizeStatus(raw: unknown): string {
+    return String(raw || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+}
+
 export default function ResultPage() {
     const params = useParams<{ roomCode?: string }>() || {};
-    const roomCode = params.roomCode;
+    const roomCode = String(params.roomCode || '').trim();
     const { roomInfo, roomLoading, roomNotFound, loadRoom } = useVoteRoomStore();
+    const roomKey = normalizeId(roomInfo?.id || roomInfo?.roomCode);
+    const roomStatus = normalizeStatus(roomInfo?.status);
 
     const [results, setResults] = useState<VoteResult[]>([]);
     const [resultsLoading, setResultsLoading] = useState(false);
@@ -42,21 +48,25 @@ export default function ResultPage() {
     const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
 
     useEffect(() => {
-        if (roomCode) loadRoom(roomCode);
+        if (roomCode) {
+            void loadRoom(roomCode);
+        }
     }, [roomCode, loadRoom]);
 
-    const fetchResults = useCallback(async (targetRoomId?: string) => {
-        const roomId = String(targetRoomId || roomInfo?.id || roomInfo?.roomCode || '').trim();
-        if (!roomId) return;
+    const fetchResults = useCallback(async (targetRoomId: string) => {
+        const roomId = String(targetRoomId || '').trim();
+        if (!roomId) {
+            return;
+        }
 
         setResultsLoading(true);
         setResultsError('');
         try {
             const res = await apiClient.get(`/rooms/${roomId}/results`);
             const mapped = (res.data || []).map((item: unknown) => {
-                const typedItem = item as { id?: string; voteCount?: number };
+                const typedItem = item as { candidateId?: string; voteCount?: number };
                 return {
-                    candidateId: typedItem.id,
+                    candidateId: typedItem.candidateId,
                     voteCount: typedItem.voteCount,
                 };
             });
@@ -72,31 +82,40 @@ export default function ResultPage() {
         } finally {
             setResultsLoading(false);
         }
-    }, [roomInfo?.id, roomInfo?.roomCode]);
+    }, []);
 
     useEffect(() => {
-        if (!roomInfo || roomInfo.status !== 'closed') {
+        if (roomStatus !== 'closed' || !roomKey) {
             setResults([]);
             setResultsLoading(false);
             setResultsError('');
             return;
         }
 
-        void fetchResults(roomInfo.id || roomInfo.roomCode);
-    }, [roomInfo, roomInfo?.id, roomInfo?.roomCode, roomInfo?.status, fetchResults]);
+        void fetchResults(roomKey);
+    }, [roomKey, roomStatus, fetchResults]);
 
     useRoomSocket({
         roomId: roomInfo?.id,
         enabled: !!roomInfo?.id && !!roomCode,
         onRoomStatusChanged: (payload) => {
-            if (!roomCode || normalizeId(payload.roomId) !== normalizeId(roomInfo?.id)) return;
-            void loadRoom(roomCode);
-            if (String(payload.status || '').toLowerCase() === 'closed') {
-                void fetchResults(payload.roomId);
+            const payloadRoomId = normalizeId(payload.roomId);
+            if (!roomCode || payloadRoomId !== normalizeId(roomInfo?.id)) return;
+
+            const nextStatus = normalizeStatus(payload.status);
+            if (nextStatus && nextStatus === roomStatus) {
+                return;
             }
+
+            void loadRoom(roomCode, { silent: true });
+            if (nextStatus === 'closed') {
+                void fetchResults(payloadRoomId);
+            }
+
             if (
-                String(payload.status || '').toLowerCase() === 'draft' ||
-                String(payload.status || '').toLowerCase() === 'pending'
+                nextStatus === 'draft' ||
+                nextStatus === 'pending' ||
+                nextStatus === 'open'
             ) {
                 setResults([]);
                 setResultsError('');
@@ -128,7 +147,9 @@ export default function ResultPage() {
                         action={(
                             <button
                                 onClick={() => {
-                                    void fetchResults();
+                                    if (roomKey) {
+                                        void fetchResults(roomKey);
+                                    }
                                 }}
                                 className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
                             >

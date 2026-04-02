@@ -10,6 +10,8 @@ export type UserDocument = {
     studentId: string;
     password: string;
     mustChangePassword?: boolean;
+    activeDeviceId?: string;
+    activeDeviceBoundAt?: Date;
     createdByAdminId?: string;
     role?: 'user';
     createdAt?: Date;
@@ -21,6 +23,19 @@ export function normalizeText(value: unknown): string {
 }
 
 export function serializeUser(user: UserDocument) {
+    return {
+        id: user._id?.toString() || '',
+        username: user.username,
+        fullName: user.fullName,
+        role: 'user',
+        mustChangePassword: Boolean(user.mustChangePassword),
+        createdByAdminId: user.createdByAdminId || '',
+        createdAt: user.createdAt?.toISOString?.() || '',
+        updatedAt: user.updatedAt?.toISOString?.() || '',
+    };
+}
+
+export function serializeManagedUser(user: UserDocument) {
     return {
         id: user._id?.toString() || '',
         username: user.username,

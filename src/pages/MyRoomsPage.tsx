@@ -1,8 +1,10 @@
 ﻿"use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import apiClient from '../api/apiClient';
 import { useAuthStore } from '../store/authStore';
+import { useVoteRoomStore } from '../store/voteRoomStore';
 import ForceChangePasswordModal from '../components/ForceChangePasswordModal';
 import LoadingState from '../components/ui/LoadingState';
 import EmptyState from '../components/ui/EmptyState';
@@ -52,6 +54,14 @@ function normalizeRoomId(raw: unknown): string {
 
 type StatusFilter = 'all' | Room['status'];
 
+function getRoomHref(room: Room): string {
+    if (room.status === 'closed') {
+        return `/vote-room/${room.roomCode}/result`;
+    }
+
+    return `/vote-room/${room.roomCode}`;
+}
+
 function toBadgeTone(status: Room['status']): 'info' | 'warning' | 'success' | 'neutral' {
     if (status === 'open') return 'success';
     if (status === 'draft') return 'info';
@@ -71,6 +81,7 @@ export default function MyRoomsPage() {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const reloadTimerRef = useRef<number | null>(null);
+    const prefetchedRoomsRef = useRef(new Set<string>());
 
     const fetchMyRooms = useCallback(async () => {
         setLoading(true);
@@ -194,13 +205,17 @@ export default function MyRoomsPage() {
         }
     };
 
-    const handleEnterRoom = (room: Room) => {
-        if (room.status === 'closed') {
-            router.push(`/vote-room/${room.roomCode}/result`);
-            return;
+    const prefetchRoomEntry = useCallback((room: Room) => {
+        const href = getRoomHref(room);
+        if (prefetchedRoomsRef.current.has(href)) return;
+
+        prefetchedRoomsRef.current.add(href);
+        router.prefetch(href);
+
+        if (room.status !== 'closed') {
+            void useVoteRoomStore.getState().loadRoom(room.roomCode, { silent: true });
         }
-        router.push(`/vote-room/${room.roomCode}`);
-    };
+    }, [router]);
 
     return (
         <div className="min-h-screen bg-slate-50">
@@ -293,9 +308,14 @@ export default function MyRoomsPage() {
                 {!loading && !error && filteredRooms.length > 0 ? (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         {filteredRooms.map((room) => (
-                            <button
+                            <Link
                                 key={room.id}
-                                onClick={() => handleEnterRoom(room)}
+                                href={getRoomHref(room)}
+                                prefetch={false}
+                                onClick={() => prefetchRoomEntry(room)}
+                                onMouseEnter={() => prefetchRoomEntry(room)}
+                                onFocus={() => prefetchRoomEntry(room)}
+                                onTouchStart={() => prefetchRoomEntry(room)}
                                 className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50/30"
                             >
                                 <div className="mb-3 flex items-start justify-between gap-2">
@@ -306,7 +326,7 @@ export default function MyRoomsPage() {
                                 <p className="mt-3 text-xs font-mono text-slate-500">
                                     {'ລະຫັດຫ້ອງ'}: {room.roomCode}
                                 </p>
-                            </button>
+                            </Link>
                         ))}
                     </div>
                 ) : null}

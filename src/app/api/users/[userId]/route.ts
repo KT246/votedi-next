@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
 
 import { getAuthContext } from '@/lib/serverAuth';
-import { normalizeText, serializeUser, type UserDocument } from '@/lib/userAuth';
+import { normalizeText, serializeManagedUser, type UserDocument } from '@/lib/userAuth';
 
 function isObjectId(value: string): boolean {
     return ObjectId.isValid(value) && String(new ObjectId(value)) === value;
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json(serializeUser(user));
+    return NextResponse.json(serializeManagedUser(user));
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             return NextResponse.json({ message: 'User not found' }, { status: 404 });
         }
 
-        return NextResponse.json(serializeUser(updated));
+        return NextResponse.json(serializeManagedUser(updated));
     } catch (error) {
         console.error('Update user error:', error);
         return NextResponse.json({ message: 'Failed to update user' }, { status: 500 });

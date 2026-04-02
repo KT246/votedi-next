@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
-import type { Db } from 'mongodb';
+import { ObjectId, type Db } from 'mongodb';
 import { connectToDatabase } from './mongodb';
+import type { UserDocument } from './userAuth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vote-next-secret-key';
 
@@ -22,6 +23,10 @@ function readBearerToken(authorization: string | null): string {
     return match?.[1] || '';
 }
 
+export function readDeviceId(request: Request): string {
+    return String(request.headers.get('x-device-id') || '').trim();
+}
+
 export async function getAuthContext(request: Request, requiredRole?: 'admin' | 'user'): Promise<AuthContext | null> {
     const token = readBearerToken(request.headers.get('authorization'));
     if (!token) return null;
@@ -33,9 +38,26 @@ export async function getAuthContext(request: Request, requiredRole?: 'admin' | 
         }
 
         const { db } = await connectToDatabase();
+        if (payload.role === 'user') {
+            const userId = String(payload.id || '').trim();
+            const deviceId = readDeviceId(request);
+            if (!userId || !ObjectId.isValid(userId) || !deviceId) {
+                return null;
+            }
+
+            const user = await db.collection<UserDocument>('users').findOne({ _id: new ObjectId(userId) });
+            if (!user) {
+                return null;
+            }
+
+            const activeDeviceId = String(user.activeDeviceId || '').trim();
+            if (activeDeviceId && activeDeviceId !== deviceId) {
+                return null;
+            }
+        }
+
         return { db, payload };
     } catch {
         return null;
     }
 }
-
