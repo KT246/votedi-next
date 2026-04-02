@@ -15,11 +15,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const { adminId } = await params;
-    if (!isObjectId(adminId)) {
+    const body = await request.json();
+
+    const requestedAdminId = String(adminId || '').trim();
+    const candidateAdminId = isObjectId(requestedAdminId) ? requestedAdminId : String(auth.payload.id || '').trim();
+
+    if (!isObjectId(candidateAdminId)) {
         return NextResponse.json({ message: 'Invalid admin id' }, { status: 400 });
     }
-
-    const body = await request.json();
     const updates: Record<string, unknown> = {};
 
     if (typeof body?.fullName === 'string') {
@@ -34,12 +37,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return NextResponse.json({ message: 'No updates provided' }, { status: 400 });
     }
 
-    if (auth.payload.id !== adminId && auth.payload.username !== 'admin') {
+    if (auth.payload.id !== candidateAdminId && auth.payload.username !== 'admin') {
         return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
 
     const result = await auth.db.collection('admins').findOneAndUpdate(
-        { _id: new ObjectId(adminId) },
+        { _id: new ObjectId(candidateAdminId) },
         { $set: updates },
         { returnDocument: 'after' },
     );

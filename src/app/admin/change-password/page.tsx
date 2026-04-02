@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from "lucide-react";
 import { useAdminAuthStore } from "../../../store/adminAuthStore";
 import { useAdminRole } from "../../../hooks/useAdminRole";
 import apiClient from "../../../api/apiClient";
@@ -40,12 +40,17 @@ export default function AdminChangePasswordPage() {
     setSaving(true);
     setError("");
     try {
-      await apiClient.post("/auth/login", {
+      const loginRes = await apiClient.post("/auth/login", {
         username: adminUser.username,
         password: form.current,
       });
 
-      await apiClient.patch(`/admins/${adminId}`, {
+      const authenticatedAdminId = (loginRes.data?.user?.id as string) || adminId;
+      if (!authenticatedAdminId) {
+        throw new Error('Admin ID is missing');
+      }
+
+      await apiClient.patch(`/admins/${authenticatedAdminId}`, {
         password: form.next,
       });
 
@@ -101,7 +106,11 @@ export default function AdminChangePasswordPage() {
                 type="button"
                 onClick={() => setShowCurrentPassword((prev) => !prev)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-600 hover:text-indigo-800"
-                aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                aria-label={
+                  showCurrentPassword
+                    ? "Hide current password"
+                    : "Show current password"
+                }
               >
                 {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -125,7 +134,9 @@ export default function AdminChangePasswordPage() {
                 type="button"
                 onClick={() => setShowNextPassword((prev) => !prev)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-600 hover:text-indigo-800"
-                aria-label={showNextPassword ? 'Hide new password' : 'Show new password'}
+                aria-label={
+                  showNextPassword ? "Hide new password" : "Show new password"
+                }
               >
                 {showNextPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
