@@ -1,6 +1,7 @@
 ﻿"use client";
 import { useVoteRoomStore } from '../store/voteRoomStore';
 import { onAvatarError, toDisplayAvatarUrl } from '../utils/avatar';
+import { cleanCandidateText, formatLaoDate } from '../utils/candidateDisplay';
 import ModalShell from './ui/ModalShell';
 interface VoteConfirmModalProps {
     selectedIds: string[];
@@ -17,7 +18,7 @@ export default function VoteConfirmModal({
     submitting,
     submitError,
 }: VoteConfirmModalProps) {
-        const candidates = useVoteRoomStore((state) => state.candidates);
+    const candidates = useVoteRoomStore((state) => state.candidates);
     const selected = candidates.filter((candidate) => selectedIds.includes(candidate.id));
 
     const footer = (
@@ -63,7 +64,14 @@ export default function VoteConfirmModal({
                             />
                             <div className="min-w-0">
                                 <p className="truncate text-sm font-semibold text-slate-900">{candidate.name}</p>
-                                <p className="truncate text-xs text-slate-500">{candidate.title}</p>
+                                {candidate.date ? (
+                                    <p className="truncate text-xs text-slate-500">
+                                        {`ວັນເດືອນປີເກີດ: ${formatLaoDate(candidate.date)}`}
+                                    </p>
+                                ) : null}
+                                {candidate.title ? (
+                                    <p className="truncate text-xs text-slate-500">{`ຕຳແໜ່ງ: ${cleanCandidateText(candidate.title) || candidate.title}`}</p>
+                                ) : null}
                             </div>
                         </div>
                     ))}

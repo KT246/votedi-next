@@ -12,7 +12,7 @@ interface VoteRoomState {
     roomNotFound: boolean;
     voteRecord: VoteRecord | null;
     loadRoom: (roomCode: string, options?: { silent?: boolean }) => Promise<void>;
-    saveVoteRecord: (record: VoteRecord) => void;
+    saveVoteRecord: (record: VoteRecord | null) => void;
     resetRoom: () => void;
 }
 
@@ -116,7 +116,7 @@ export const useVoteRoomStore = create<VoteRoomState>((set, get) => ({
         }
     },
 
-    saveVoteRecord: (record: VoteRecord) => {
+    saveVoteRecord: (record: VoteRecord | null) => {
         set({ voteRecord: record });
     },
 

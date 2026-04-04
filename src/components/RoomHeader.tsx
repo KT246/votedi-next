@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
+import apiClient from '../api/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { useVoteRoomStore } from '../store/voteRoomStore';
 import { VoteStatus } from '../types';
+import { onAvatarError, toDisplayAvatarUrl } from '../utils/avatar';
 
 const STATUS_LABELS: Record<string, string> = {
     status_open: 'ເປີດ',
@@ -31,10 +33,24 @@ function formatDateTime(value: string | null) {
 
 export default function RoomHeader() {
     const user = useAuthStore((state) => state.currentUser);
+    const logout = useAuthStore((state) => state.logout);
     const roomInfo = useVoteRoomStore((state) => state.roomInfo);
+    const resetRoom = useVoteRoomStore((state) => state.resetRoom);
     const router = useRouter();
 
     const status = roomInfo ? STATUS_CONFIG[roomInfo.status] || STATUS_CONFIG.closed : STATUS_CONFIG.closed;
+
+    const handleLogout = async () => {
+        try {
+            await apiClient.post('/auth/logout');
+        } catch {
+            // Always clear the local session even if the server logout request fails.
+        } finally {
+            resetRoom();
+            logout();
+            router.push('/');
+        }
+    };
 
     if (!roomInfo) return null;
 
@@ -72,15 +88,32 @@ export default function RoomHeader() {
 
                 {user ? (
                     <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="text-slate-500">
+                        <div className="flex items-center gap-2 text-slate-500">
+                            <img
+                                src={toDisplayAvatarUrl(user.avatar, user.fullName || user.username)}
+                                alt={user.fullName || user.username}
+                                onError={(event) => onAvatarError(event, user.fullName || user.username)}
+                                className="h-7 w-7 rounded-full border border-slate-200 object-cover bg-slate-100"
+                            />
+                            <span>
+                                {'ผู้ใช้'}: <span className="font-medium text-slate-700">{user.fullName}</span>
+                            </span>
+                        </div>
+                        <span className="hidden text-slate-500">
                             {'ຜູ້ໃຊ້'}: <span className="font-medium text-slate-700">{user.fullName}</span>
                         </span>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={() => router.push('/my-rooms')}
-                                className="text-slate-500 transition-colors hover:text-slate-700"
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
                             >
                                 {'ອອກຈາກຫ້ອງ'}
+                            </button>
+                            <button
+                                onClick={handleLogout}
+                                className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-rose-600 transition-colors hover:bg-rose-50"
+                            >
+                                {'ອອກຈາກລະບົບ'}
                             </button>
                         </div>
                     </div>

@@ -9,6 +9,7 @@ type ImportRow = {
     fullName?: unknown;
     name?: unknown;
     studentId?: unknown;
+    avatar?: unknown;
 };
 
 function normalizeUsername(value: unknown): string {
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
             const username = normalizeUsername(row.username);
             const fullName = normalizeText(row.fullName ?? row.name);
             const studentId = normalizeText(row.studentId);
+            const avatar = normalizeText(row.avatar);
 
             if (!username || !fullName || !studentId) {
                 skipped.push({ row: index + 1, reason: 'Missing username, full name or student ID' });
@@ -68,6 +70,7 @@ export async function POST(request: NextRequest) {
                 username,
                 fullName,
                 studentId,
+                avatar,
                 password: await bcrypt.hash(studentId, 10),
                 mustChangePassword: true,
                 createdByAdminId: auth.payload.id || '',

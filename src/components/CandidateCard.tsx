@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Candidate } from '../types';
 import { onAvatarError, toDisplayAvatarUrl } from '../utils/avatar';
+import { cleanCandidateText, formatLaoDate } from '../utils/candidateDisplay';
 
 interface CandidateCardProps {
     candidate: Candidate;
@@ -75,8 +76,14 @@ export default function CandidateCard({
 
                 <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-bold leading-snug text-slate-900">{candidate.name}</h3>
-                    <p className="mt-0.5 text-xs font-medium text-indigo-600">{candidate.title}</p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{candidate.shortBio}</p>
+                    {candidate.date ? (
+                        <p className="mt-0.5 text-xs font-medium text-indigo-600">
+                            {`ວັນເດືອນປີເກີດ: ${formatLaoDate(candidate.date)}`}
+                        </p>
+                    ) : null}
+                    {candidate.title ? (
+                        <p className="mt-0.5 text-xs text-slate-500">{`ຕຳແໜ່ງ: ${cleanCandidateText(candidate.title) || candidate.title}`}</p>
+                    ) : null}
                 </div>
 
                 <span
@@ -106,7 +113,9 @@ export default function CandidateCard({
 
                 {expanded ? (
                     <div className="mt-3 space-y-2">
-                        <p className="text-xs leading-relaxed text-slate-600">{candidate.fullProfile}</p>
+                        {cleanCandidateText(candidate.fullProfile) ? (
+                            <p className="text-xs leading-relaxed text-slate-600">{cleanCandidateText(candidate.fullProfile)}</p>
+                        ) : null}
                         {candidate.achievements && candidate.achievements.length > 0 ? (
                             <div>
                                 <p className="mb-1 text-xs font-semibold text-slate-700">

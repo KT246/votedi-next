@@ -7,6 +7,7 @@ import { autoCloseExpiredRoom, getVoteRoomKeys } from '@/lib/roomLifecycle';
 type RoomDocument = {
     _id?: ObjectId;
     roomCode?: string;
+    allowedUsers?: string[];
     status?: unknown;
     startTime?: Date | null;
     endTime?: Date | null;
@@ -19,7 +20,25 @@ type VoteDoc = {
     roomId?: string;
     candidateId?: string;
     selectedIds?: string[];
+    userId?: string;
+    votedAt?: Date | string;
 };
+
+type UserDoc = {
+    _id?: ObjectId;
+    username?: string;
+    fullName?: string;
+};
+
+function normalizeString(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : String(value || '').trim();
+}
+
+function normalizeVoteAt(value: unknown): string | null {
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    return null;
+}
 
 async function findRoomByKey(
     db: { collection: (name: string) => { findOne: (query: Record<string, unknown>) => Promise<{ _id?: { toString?: () => string } } | null> } },
@@ -55,8 +74,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const voteDocs = await auth.db.collection<VoteDoc>('votes').find({ roomId: { $in: getVoteRoomKeys(activeRoom, roomId) } }).toArray();
     const counts = new Map<string, number>();
+    const voteByUserId = new Map<string, VoteDoc>();
 
     for (const vote of voteDocs) {
+        const userId = normalizeString(vote.userId);
+        if (userId && !voteByUserId.has(userId)) {
+            voteByUserId.set(userId, vote);
+        }
+
         if (Array.isArray(vote.selectedIds) && vote.selectedIds.length > 0) {
             for (const candidateId of vote.selectedIds) {
                 counts.set(candidateId, (counts.get(candidateId) || 0) + 1);
@@ -73,5 +98,53 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .map(([candidateId, voteCount]) => ({ candidateId, voteCount }))
         .sort((a, b) => b.voteCount - a.voteCount);
 
-    return NextResponse.json(results);
+    const allowedUsers = Array.from(
+        new Set(
+            Array.isArray(activeRoom.allowedUsers)
+                ? activeRoom.allowedUsers.map((value: unknown) => normalizeString(value)).filter(Boolean)
+                : [],
+        ),
+    );
+
+    const eligibleObjectIds = allowedUsers
+        .filter((value) => ObjectId.isValid(value) && String(new ObjectId(value)) === value)
+        .map((value) => new ObjectId(value));
+
+    const userDocs = eligibleObjectIds.length > 0
+        ? await auth.db.collection<UserDoc>('users').find({ _id: { $in: eligibleObjectIds } }).toArray()
+        : [];
+
+    const userMap = new Map(
+        userDocs.map((user) => [user._id?.toString() || '', user]),
+    );
+
+    const rows = allowedUsers.map((userId) => {
+        const user = userMap.get(userId);
+        const vote = voteByUserId.get(userId);
+        return {
+            userId,
+            username: normalizeString(user?.username) || userId,
+            fullName: normalizeString(user?.fullName) || normalizeString(user?.username) || userId,
+            hasVoted: Boolean(vote),
+            selectedIds: Array.isArray(vote?.selectedIds)
+                ? vote.selectedIds.map((item: unknown) => normalizeString(item)).filter(Boolean)
+                : vote?.candidateId
+                    ? [normalizeString(vote.candidateId)]
+                    : [],
+            submittedAt: normalizeVoteAt(vote?.votedAt),
+        };
+    });
+
+    const votedCount = rows.filter((row) => row.hasVoted).length;
+    const notVotedCount = rows.length - votedCount;
+
+    return NextResponse.json({
+        results,
+        participation: {
+            eligibleCount: rows.length,
+            votedCount,
+            notVotedCount,
+            rows,
+        },
+    });
 }

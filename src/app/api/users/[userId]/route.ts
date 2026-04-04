@@ -72,6 +72,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             updates.fullName = fullName;
         }
 
+        if (typeof body?.avatar === 'string') {
+            updates.avatar = normalizeText(body.avatar);
+        }
+
         const studentIdValue = typeof body?.studentId === 'string' ? normalizeText(body.studentId) : '';
         const shouldResetPassword = Boolean(body?.resetPasswordToStudentId);
         if (studentIdValue) {

@@ -8,6 +8,7 @@ export type UserDocument = {
     username: string;
     fullName: string;
     studentId: string;
+    avatar?: string;
     password: string;
     mustChangePassword?: boolean;
     activeDeviceId?: string;
@@ -27,6 +28,7 @@ export function serializeUser(user: UserDocument) {
         id: user._id?.toString() || '',
         username: user.username,
         fullName: user.fullName,
+        avatar: user.avatar || '',
         role: 'user',
         mustChangePassword: Boolean(user.mustChangePassword),
         createdByAdminId: user.createdByAdminId || '',
@@ -41,6 +43,7 @@ export function serializeManagedUser(user: UserDocument) {
         username: user.username,
         fullName: user.fullName,
         studentId: user.studentId,
+        avatar: user.avatar || '',
         role: 'user',
         mustChangePassword: Boolean(user.mustChangePassword),
         createdByAdminId: user.createdByAdminId || '',

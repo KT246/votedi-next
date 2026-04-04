@@ -8,6 +8,10 @@ function normalizeUsername(value: unknown): string {
     return normalizeText(value).toLowerCase();
 }
 
+function normalizeAvatar(value: unknown): string {
+    return normalizeText(value);
+}
+
 export async function GET(request: NextRequest) {
     const auth = await getAuthContext(request, 'admin');
     if (!auth) {
@@ -34,6 +38,7 @@ export async function POST(request: NextRequest) {
         const username = normalizeUsername(body?.username);
         const fullName = normalizeText(body?.fullName ?? body?.name);
         const studentId = normalizeText(body?.studentId);
+        const avatar = normalizeAvatar(body?.avatar);
 
         if (!username || !fullName || !studentId) {
             return NextResponse.json({ message: 'Username, name and student ID are required' }, { status: 400 });
@@ -55,6 +60,7 @@ export async function POST(request: NextRequest) {
             username,
             fullName,
             studentId,
+            avatar,
             password: await bcrypt.hash(studentId, 10),
             mustChangePassword: true,
             createdByAdminId: auth.payload.id || '',

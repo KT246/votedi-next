@@ -1,6 +1,7 @@
 ﻿"use client";
 import Link from 'next/link';
 import { useAuthStore } from '../store/authStore';
+import { onAvatarError, toDisplayAvatarUrl } from '../utils/avatar';
 
 export default function LandingPage() {
         const user = useAuthStore((state) => state.currentUser);
@@ -20,8 +21,16 @@ export default function LandingPage() {
                 </div>
 
                 {isLoggedIn && user ? (
-                    <div className="mx-auto mt-6 max-w-md rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                        {'ສະບາຍດີ'}: <span className="font-semibold text-slate-900">{user.fullName}</span>
+                    <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+                        <img
+                            src={toDisplayAvatarUrl(user.avatar, user.fullName || user.username)}
+                            alt={user.fullName || user.username}
+                            onError={(event) => onAvatarError(event, user.fullName || user.username)}
+                            className="h-11 w-11 rounded-2xl border border-slate-200 object-cover bg-slate-100"
+                        />
+                        <div className="text-left">
+                            {'ສະບາຍດີ'}: <span className="font-semibold text-slate-900">{user.fullName}</span>
+                        </div>
                     </div>
                 ) : null}
 

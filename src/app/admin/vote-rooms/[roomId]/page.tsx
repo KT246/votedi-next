@@ -6,19 +6,34 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ChangeEvent,
   type FormEvent,
 } from "react";
-import Papa from "papaparse";
-import { Download, Loader2, RefreshCw, Save, Upload } from "lucide-react";
+import * as XLSX from "xlsx";
+import {
+  Download,
+  Loader2,
+  PencilLine,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+} from "lucide-react";
 
 import AdminRoute from "../../../../components/AdminRoute";
 import EmptyState from "../../../../components/ui/EmptyState";
 import ErrorState from "../../../../components/ui/ErrorState";
+import ImagePreviewModal from "../../../../components/ImagePreviewModal";
 import LoadingState from "../../../../components/ui/LoadingState";
+import ModalShell from "../../../../components/ui/ModalShell";
 import StatusBadge from "../../../../components/ui/StatusBadge";
 import { roomsApi } from "../../../../api/roomsApi";
-import type { Candidate, VoteResult, VoteRoom } from "../../../../types";
+import type {
+  Candidate,
+  VoteParticipationRow,
+  VoteResult,
+  VoteRoom,
+} from "../../../../types";
+import { onAvatarError, toDisplayAvatarUrl } from "../../../../utils/avatar";
 
 type RoomStatus = "draft" | "open" | "closed";
 type RoomTimeMode = "duration" | "range";
@@ -51,6 +66,14 @@ interface CandidateRow {
   date?: string;
   bio?: string | string[];
   avatar?: string;
+}
+
+interface CandidateFormState {
+  name: string;
+  title: string;
+  date: string;
+  avatar: string;
+  bioText: string;
 }
 
 function normalizeString(value: unknown): string {
@@ -132,11 +155,18 @@ function normalizeBio(value: unknown): string[] {
   }
   if (typeof value === "string") {
     return value
-      .split(";")
+      .split(/[;\n]/g)
       .map((entry) => entry.trim())
       .filter(Boolean);
   }
   return [];
+}
+
+function splitBioText(value: string): string[] {
+  return value
+    .split(/[;\n]/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function normalizeCandidate(item: unknown, index: number): Candidate {
@@ -163,6 +193,53 @@ function normalizeCandidate(item: unknown, index: number): Candidate {
     avatar: normalizeString(row.avatar),
     achievements: bio,
     voteCount: 0,
+  };
+}
+
+function emptyCandidateForm(): CandidateFormState {
+  return {
+    name: "",
+    title: "",
+    date: "",
+    avatar: "",
+    bioText: "",
+  };
+}
+
+function candidateToForm(candidate: Candidate | null): CandidateFormState {
+  if (!candidate) return emptyCandidateForm();
+  return {
+    name: candidate.name || "",
+    title: candidate.title || "",
+    date: candidate.date || "",
+    avatar: candidate.avatar || "",
+    bioText: candidate.bio?.length
+      ? candidate.bio.join("; ")
+      : candidate.fullProfile || "",
+  };
+}
+
+function candidateFormToDraft(
+  form: CandidateFormState,
+  fallbackId: string,
+  existingVoteCount = 0,
+): Candidate {
+  const name = normalizeString(form.name);
+  const title = normalizeString(form.title);
+  const date = normalizeString(form.date);
+  const avatar = normalizeString(form.avatar);
+  const bio = splitBioText(form.bioText);
+  return {
+    id: fallbackId,
+    name,
+    title,
+    date,
+    bio,
+    shortBio: bio[0] || "",
+    fullProfile: bio.join("; "),
+    avatar,
+    achievements: bio,
+    voteCount: existingVoteCount,
   };
 }
 
@@ -220,12 +297,24 @@ export default function AdminVoteRoomDetailPage() {
     maxSelection: 1,
     allowResultView: true,
   });
-  const [candidateFileName, setCandidateFileName] = useState("");
   const [candidateDrafts, setCandidateDrafts] = useState<Candidate[]>([]);
-  const [importError, setImportError] = useState("");
-  const [importMessage, setImportMessage] = useState("");
-  const [importing, setImporting] = useState(false);
+  const [previewCandidate, setPreviewCandidate] = useState<Candidate | null>(null);
+  const [candidateFormOpen, setCandidateFormOpen] = useState(false);
+  const [candidateEditingIndex, setCandidateEditingIndex] = useState<number | null>(null);
+  const [candidateForm, setCandidateForm] = useState<CandidateFormState>(
+    emptyCandidateForm(),
+  );
+  const [candidateFormError, setCandidateFormError] = useState("");
+  const [candidateSaving, setCandidateSaving] = useState(false);
+  const [candidateStatusMessage, setCandidateStatusMessage] = useState("");
+  const [candidateStatusError, setCandidateStatusError] = useState("");
   const [results, setResults] = useState<VoteResult[]>([]);
+  const [participation, setParticipation] = useState<{
+    eligibleCount: number;
+    votedCount: number;
+    notVotedCount: number;
+    rows: VoteParticipationRow[];
+  } | null>(null);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsError, setResultsError] = useState("");
   const roomKey = room?.id || room?.roomCode || roomId;
@@ -303,7 +392,37 @@ export default function AdminVoteRoomDetailPage() {
     setResultsError("");
     try {
       const res = await roomsApi.getResults(roomKey);
-      setResults(Array.isArray(res.data) ? res.data : []);
+      const payload = res.data as {
+        results?: unknown;
+        participation?: {
+          eligibleCount?: number;
+          votedCount?: number;
+          notVotedCount?: number;
+          rows?: VoteParticipationRow[];
+        };
+      };
+      const mappedResults = Array.isArray(payload?.results)
+        ? payload.results.map((item: unknown) => {
+            const typedItem = item as { candidateId?: string; voteCount?: number };
+            return {
+              candidateId: String(typedItem.candidateId || "").trim(),
+              voteCount: Number(typedItem.voteCount || 0),
+            };
+          }).filter((item) => item.candidateId)
+        : [];
+      setResults(mappedResults);
+      setParticipation(
+        payload?.participation
+          ? {
+              eligibleCount: Number(payload.participation.eligibleCount || 0),
+              votedCount: Number(payload.participation.votedCount || 0),
+              notVotedCount: Number(payload.participation.notVotedCount || 0),
+              rows: Array.isArray(payload.participation.rows)
+                ? payload.participation.rows
+                : [],
+            }
+          : null,
+      );
     } catch (err: unknown) {
       const typedErr = err as {
         response?: { data?: { message?: string | string[] } };
@@ -315,6 +434,7 @@ export default function AdminVoteRoomDetailPage() {
           ? message.join(", ")
           : message || typedErr?.message || "ບໍ່ສາມາດໂຫຼດຜົນໄດ້",
       );
+      setParticipation(null);
     } finally {
       setResultsLoading(false);
     }
@@ -434,76 +554,61 @@ export default function AdminVoteRoomDetailPage() {
     }
   };
 
-  const handleCandidateFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    setImportError("");
-    setImportMessage("");
-    setCandidateDrafts([]);
-    setCandidateFileName("");
+  const handleDownloadCandidateListXlsx = () => {
+    if (candidateDrafts.length === 0) return;
 
-    if (!file) return;
+    const rows = candidateDrafts.map((candidate) => ({
+      name: candidate.name || "",
+      title: candidate.title || "",
+      date: candidate.date || "",
+      bio: candidate.bio?.length
+        ? candidate.bio.join("; ")
+        : candidate.fullProfile || "",
+      avatar: candidate.avatar || "",
+    }));
 
-    setCandidateFileName(file.name);
-    Papa.parse<CandidateRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (parsed) => {
-        const mapped = parsed.data
-          .map((row, index) => {
-            const candidate = normalizeCandidate(row, index);
-            const hasMeaningfulValue =
-              candidate.name ||
-              candidate.title ||
-              candidate.date ||
-              (candidate.bio?.length || 0) > 0 ||
-              candidate.avatar ||
-              (candidate.achievements?.length || 0) > 0;
-            return hasMeaningfulValue ? candidate : null;
-          })
-          .filter((item): item is Candidate => Boolean(item));
-
-        if (mapped.length === 0) {
-          setImportError("ບໍ່ພົບ candidate ໃນໄຟລ໌ CSV");
-          return;
-        }
-
-        setCandidateDrafts(mapped);
-      },
-      error: () => {
-        setImportError("ນຳເຂົ້າ CSV ບໍ່ສຳເລັດ");
-      },
-    });
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Candidates");
+    XLSX.writeFile(workbook, "candidate-list.xlsx");
   };
 
-  const handleDownloadSampleCsv = () => {
-    const csv = [
-      "name,title,date,bio,avatar",
-      '"ຜູ້ສະໝັກ 1","ຕຳແໜ່ງຕົວຢ່າງ","2026-03-31","ຈຸດເດັ່ນ 1;ຈຸດເດັ່ນ 2","https://drive.google.com/uc?export=view&id=FILE_ID"',
-      '"ຜູ້ສະໝັກ 2","ຕຳແໜ່ງຕົວຢ່າງ","2025-12-01","ປະສົບການ 1;ປະສົບການ 2","https://drive.google.com/uc?export=view&id=FILE_ID_2"',
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "candidate-sample.csv";
-    anchor.click();
-    URL.revokeObjectURL(url);
+  const closeCandidateForm = () => {
+    setCandidateFormOpen(false);
+    setCandidateEditingIndex(null);
+    setCandidateForm(emptyCandidateForm());
+    setCandidateFormError("");
   };
 
-  const handleImportCandidates = async () => {
-    if (!room || !roomKey) return;
-    if (candidateDrafts.length === 0) {
-      setImportError("ກະລຸນາເລືອກໄຟລ໌ CSV ກ່ອນ");
-      return;
-    }
+  const openAddCandidateForm = () => {
+    setCandidateEditingIndex(null);
+    setCandidateForm(emptyCandidateForm());
+    setCandidateFormError("");
+    setCandidateFormOpen(true);
+  };
 
-    setImporting(true);
-    setImportError("");
-    setImportMessage("");
+  const openEditCandidateForm = (index: number) => {
+    const candidate = candidateDrafts[index];
+    if (!candidate) return;
+    setCandidateEditingIndex(index);
+    setCandidateForm(candidateToForm(candidate));
+    setCandidateFormError("");
+    setCandidateFormOpen(true);
+  };
+
+  const persistCandidateDrafts = async (
+    nextCandidates: Candidate[],
+    successMessage: string,
+  ) => {
+    if (!room || !roomKey) return false;
+
+    setCandidateSaving(true);
+    setCandidateStatusMessage("");
+    setCandidateStatusError("");
+
     try {
       const res = await roomsApi.update(roomKey, {
-        candidates: candidateDrafts,
+        candidates: nextCandidates,
       } as Partial<VoteRoom>);
       const updated = normalizeRoom(res.data, roomKey);
       setRoom(updated);
@@ -513,22 +618,83 @@ export default function AdminVoteRoomDetailPage() {
           normalizeCandidate(item, index),
         ),
       );
-      setImportMessage(
-        `ນຳເຂົ້າ candidate ${updated.candidates.length} ຄົນແລ້ວ`,
-      );
+      setCandidateStatusMessage(successMessage);
+      return true;
     } catch (err: unknown) {
       const typedErr = err as {
         response?: { data?: { message?: string | string[] } };
         message?: string;
       };
       const message = typedErr?.response?.data?.message;
-      setImportError(
+      setCandidateStatusError(
         Array.isArray(message)
           ? message.join(", ")
-          : message || typedErr?.message || "ນຳເຂົ້າ candidate ບໍ່ສຳເລັດ",
+          : message || typedErr?.message || "ບໍ່ສາມາດບັນທຶກ candidate ໄດ້",
       );
+      return false;
     } finally {
-      setImporting(false);
+      setCandidateSaving(false);
+    }
+  };
+
+  const handleSaveCandidateDraft = async () => {
+    const name = normalizeString(candidateForm.name);
+    if (!name) {
+      setCandidateFormError("ກະລຸນາປ້ອນຊື່ candidate");
+      return;
+    }
+
+    const existingIndex = candidateEditingIndex;
+    const existingCandidate =
+      existingIndex !== null ? candidateDrafts[existingIndex] : null;
+    const fallbackId =
+      existingCandidate?.id ||
+      `candidate-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+    const nextCandidate = candidateFormToDraft(
+      candidateForm,
+      fallbackId,
+      existingCandidate?.voteCount || 0,
+    );
+    const nextCandidates =
+      existingIndex === null
+        ? [...candidateDrafts, nextCandidate]
+        : candidateDrafts.map((item, index) =>
+            index === existingIndex ? nextCandidate : item,
+          );
+
+    const saved = await persistCandidateDrafts(
+      nextCandidates,
+      existingIndex === null
+        ? `ເພີ່ມ candidate "${name}" ແລ້ວ`
+        : `ບັນທຶກ candidate "${name}" ແລ້ວ`,
+    );
+    if (saved) closeCandidateForm();
+  };
+
+  const handleDeleteCandidateDraft = async (index: number) => {
+    const candidate = candidateDrafts[index];
+    if (!candidate) return;
+
+    const confirmed = window.confirm(
+      `ຕ້ອງການລົບ candidate "${candidate.name}" ຫຼືບໍ?`,
+    );
+    if (!confirmed) return;
+
+    const nextCandidates = candidateDrafts.filter(
+      (_, candidateIndex) => candidateIndex !== index,
+    );
+    const saved = await persistCandidateDrafts(
+      nextCandidates,
+      `ລົບ candidate "${candidate.name}" ແລ້ວ`,
+    );
+    if (!saved) return;
+
+    if (candidateEditingIndex === index) {
+      closeCandidateForm();
+    } else if (candidateEditingIndex !== null && candidateEditingIndex > index) {
+      setCandidateEditingIndex((prev) => (prev !== null ? prev - 1 : prev));
     }
   };
 
@@ -815,7 +981,7 @@ export default function AdminVoteRoomDetailPage() {
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                     }`}
                   >
-                    ນຳເຂົ້າຜູ້ສະໝັກ
+                    ຈັດການຜູ້ສະໝັກ
                   </button>
                   <button
                     type="button"
@@ -835,83 +1001,62 @@ export default function AdminVoteRoomDetailPage() {
                 {activeTab === "import" ? (
                   <div className="space-y-5">
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        ໄຟລ໌ CSV
-                      </label>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <input
-                          type="file"
-                          accept=".csv,text/csv"
-                          onChange={handleCandidateFileChange}
-                          className="block w-full flex-1 text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-indigo-700"
-                        />
+                      <div className="flex items-center justify-end">
                         <button
                           type="button"
-                          onClick={handleDownloadSampleCsv}
+                          onClick={handleDownloadCandidateListXlsx}
+                          disabled={candidateDrafts.length === 0}
                           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                         >
                           <Download className="h-4 w-4" />
-                          ຕາມຕົວຢ່າງ CSV
+                          ດາວໂຫຼດລາຍຊື່ຂໍ້ມູນ
                         </button>
                       </div>
-                      <p className="mt-2 text-xs text-slate-500">
-                        ຟອມທີ່ຮອງຮັບ: <code>name</code>, <code>title</code>,{" "}
-                        <code>date</code>, <code>bio</code>, <code>avatar</code>
-                      </p>
+                      {candidateStatusError ? (
+                        <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                          {candidateStatusError}
+                        </div>
+                      ) : null}
+                      {candidateStatusMessage ? (
+                        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                          {candidateStatusMessage}
+                        </div>
+                      ) : null}
                     </div>
-
-                    {candidateFileName ? (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                        ໄຟລ໌ທີ່ເລືອກ:{" "}
-                        <span className="font-semibold">
-                          {candidateFileName}
-                        </span>
-                      </div>
-                    ) : null}
-
-                    {importError ? (
-                      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                        {importError}
-                      </div>
-                    ) : null}
-                    {importMessage ? (
-                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                        {importMessage}
-                      </div>
-                    ) : null}
 
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-sm text-slate-500">
-                        ພົບຜູ້ສະໝັກທີ່ຈະນຳເຂົ້າ:{" "}
+                        ພົບຜູ້ສະໝັກ:{" "}
                         <span className="font-semibold text-slate-900">
                           {candidateDrafts.length}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleImportCandidates()}
-                        disabled={importing || candidateDrafts.length === 0}
-                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {importing ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Upload className="h-4 w-4" />
-                        )}
-                        {importing ? "ກຳລັງນຳເຂົ້າ..." : "ນຳເຂົ້າຜູ້ສະໝັກ"}
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={openAddCandidateForm}
+                          disabled={candidateSaving}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                          <Plus className="h-4 w-4" />
+                          ເພີ່ມຂໍ້ມູນ
+                        </button>
+                      </div>
                     </div>
 
                     {candidateDrafts.length === 0 ? (
                       <EmptyState
-                        title="ຍັງບໍ່ມີ candidate ສຳລັບນຳເຂົ້າ"
-                        description="ເລືອກໄຟລ໌ CSV ເພື່ອນຳເຂົ້າຂໍ້ມູນ candidate."
+                        title="ຍັງບໍ່ມີ candidate"
+                        description="ເພີ່ມ candidate ເອງ ຫຼື ດາວໂຫຼດໄຟລ໌ຕົວຢ່າງເພື່ອແກ້ໄຂ."
                       />
                     ) : (
                       <div className="overflow-hidden rounded-2xl border border-slate-200">
                         <table className="min-w-full divide-y divide-slate-200">
                           <thead className="bg-slate-50">
                             <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                รูป
+                              </th>
                               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 ຊື່
                               </th>
@@ -924,11 +1069,29 @@ export default function AdminVoteRoomDetailPage() {
                               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 bio
                               </th>
+                              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                ຈັດການ
+                              </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200">
-                            {candidateDrafts.map((candidate) => (
+                            {candidateDrafts.map((candidate, index) => (
                               <tr key={candidate.id} className="align-top">
+                                <td className="px-4 py-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewCandidate(candidate)}
+                                    className="block overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                                    aria-label={`ເບິ່ງຮູບຂອງ ${candidate.name}`}
+                                  >
+                                    <img
+                                      src={toDisplayAvatarUrl(candidate.avatar, candidate.name)}
+                                      alt={candidate.name}
+                                      onError={(event) => onAvatarError(event, candidate.name)}
+                                      className="h-12 w-12 object-cover"
+                                    />
+                                  </button>
+                                </td>
                                 <td className="px-4 py-3 text-sm font-medium text-slate-900">
                                   {candidate.name}
                                 </td>
@@ -942,6 +1105,28 @@ export default function AdminVoteRoomDetailPage() {
                                   {candidate.bio?.length
                                     ? candidate.bio.join(" · ")
                                     : "-"}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditCandidateForm(index)}
+                                      disabled={candidateSaving}
+                                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 transition-colors hover:bg-slate-50"
+                                      title="ແກ້ໄຂ"
+                                    >
+                                      <PencilLine className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleDeleteCandidateDraft(index)}
+                                      disabled={candidateSaving}
+                                      className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white p-2 text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                      title="ລົບ"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -958,6 +1143,29 @@ export default function AdminVoteRoomDetailPage() {
                         {totalVotes}
                       </span>
                     </div>
+
+                    {participation ? (
+                      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm sm:grid-cols-3">
+                        <div>
+                          <p className="text-xs text-slate-500">ມີສິດທິທັງໝົດ</p>
+                          <p className="text-lg font-bold text-slate-900">
+                            {participation.eligibleCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">ໂຫວດແລ້ວ</p>
+                          <p className="text-lg font-bold text-emerald-600">
+                            {participation.votedCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">ງດ/ບໍ່ໄດ້ໂຫວດ</p>
+                          <p className="text-lg font-bold text-amber-600">
+                            {participation.notVotedCount}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
 
                     {resultsLoading ? (
                       <LoadingState label="ກຳລັງໂຫຼດຜົນຄະແນນ..." />
@@ -981,58 +1189,128 @@ export default function AdminVoteRoomDetailPage() {
                         description="ຫາກມີຄົນໂຫວດແລ້ວ ຜົນຈະຂຶ້ນໃນໜ້ານີ້."
                       />
                     ) : (
-                      <div className="overflow-hidden rounded-2xl border border-slate-200">
-                        <table className="min-w-full divide-y divide-slate-200">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                ອັນດັບ
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                candidate
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                ຄະແນນ
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                ສັດສ່ວນ
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200">
-                            {mergedResults.map((row, index) => {
-                              const percentage =
-                                totalVotes > 0
-                                  ? Math.round(
-                                      (row.voteCount / totalVotes) * 100,
-                                    )
-                                  : 0;
-                              return (
-                                <tr key={row.candidate.id}>
-                                  <td className="px-4 py-3 text-sm font-semibold text-slate-900">
-                                    {index + 1}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-semibold text-slate-900">
-                                        {row.candidate.name}
-                                      </p>
-                                      <p className="text-xs text-slate-500">
-                                        {row.candidate.title || "-"}
-                                      </p>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-sm font-semibold text-indigo-600">
-                                    {row.voteCount}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-slate-600">
-                                    {percentage}%
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                      <div className="space-y-4">
+                        <div className="overflow-hidden rounded-2xl border border-slate-200">
+                          <table className="min-w-full divide-y divide-slate-200">
+                            <thead className="bg-slate-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  ອັນດັບ
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  candidate
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  ຄະແນນ
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  ສັດສ່ວນ
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200">
+                              {mergedResults.map((row, index) => {
+                                const percentage =
+                                  totalVotes > 0
+                                    ? Math.round(
+                                        (row.voteCount / totalVotes) * 100,
+                                      )
+                                    : 0;
+                                return (
+                                  <tr key={row.candidate.id}>
+                                    <td className="px-4 py-3 text-sm font-semibold text-slate-900">
+                                      {index + 1}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-slate-900">
+                                          {row.candidate.name}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                          {row.candidate.title || "-"}
+                                        </p>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-indigo-600">
+                                      {row.voteCount}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-slate-600">
+                                      {percentage}%
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {participation?.rows?.length ? (
+                          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                            <div className="border-b border-slate-200 px-4 py-3">
+                              <p className="text-sm font-semibold text-slate-900">
+                                ສະຖານະຜູ້ມີສິດທິໂຫວດ
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                ແອັດມິນຈະເຫັນວ່າໃຜໂຫວດແລ້ວ ແລະໃຜຍັງບໍ່ໄດ້ໂຫວດ
+                              </p>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-slate-200">
+                                <thead className="bg-slate-50">
+                                  <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      ຊື່
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      Username
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      ສະຖານະ
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      ເວລາ
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200">
+                                  {participation.rows.map((row) => (
+                                    <tr key={row.userId}>
+                                      <td className="px-4 py-3 text-sm font-medium text-slate-900">
+                                        {row.fullName}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-slate-600">
+                                        {row.username}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm">
+                                        <span
+                                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                            row.hasVoted
+                                              ? "bg-emerald-50 text-emerald-700"
+                                              : "bg-amber-50 text-amber-700"
+                                          }`}
+                                        >
+                                          {row.hasVoted
+                                            ? "ໂຫວດແລ້ວ"
+                                            : "ງດອອກສຽງ / ບໍ່ໄດ້ໂຫວດ"}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-slate-600">
+                                        {row.submittedAt
+                                          ? new Date(
+                                              row.submittedAt,
+                                            ).toLocaleString("lo-LA", {
+                                              dateStyle: "short",
+                                              timeStyle: "short",
+                                            })
+                                          : "-"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1042,6 +1320,149 @@ export default function AdminVoteRoomDetailPage() {
           </div>
         </div>
       </div>
+
+      <ModalShell
+        open={candidateFormOpen}
+        onClose={closeCandidateForm}
+        title={candidateEditingIndex === null ? "ເພີ່ມ candidate" : "ແກ້ໄຂ candidate"}
+        description="ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ ແລ້ວຄ່ອຍກົດບັນທຶກ"
+        maxWidthClass="max-w-lg"
+        footer={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={closeCandidateForm}
+              className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              ຍົກເລີກ
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveCandidateDraft}
+              disabled={candidateSaving}
+              className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {candidateSaving
+                ? "ກຳລັງບັນທຶກ..."
+                : candidateEditingIndex === null
+                  ? "ເພີ່ມ"
+                  : "ບັນທຶກ"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+              ຊື່
+            </label>
+            <input
+              type="text"
+              value={candidateForm.name}
+              onChange={(event) =>
+                setCandidateForm((prev) => ({
+                  ...prev,
+                  name: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+              placeholder="ຜູ້ສະໝັກ 1"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+              ຕຳແໜ່ງ
+            </label>
+            <input
+              type="text"
+              value={candidateForm.title}
+              onChange={(event) =>
+                setCandidateForm((prev) => ({
+                  ...prev,
+                  title: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+              placeholder="ຕຳແໜ່ງຕົວຢ່າງ"
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                ວັນທີ
+              </label>
+              <input
+                type="text"
+                value={candidateForm.date}
+                onChange={(event) =>
+                  setCandidateForm((prev) => ({
+                    ...prev,
+                    date: event.target.value,
+                  }))
+                }
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+                placeholder="2026-03-31"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                Avatar URL
+              </label>
+              <input
+                type="url"
+                value={candidateForm.avatar}
+                onChange={(event) =>
+                  setCandidateForm((prev) => ({
+                    ...prev,
+                    avatar: event.target.value,
+                  }))
+                }
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+                placeholder="https://... หรือ Google Drive link"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+              BIO
+            </label>
+            <textarea
+              value={candidateForm.bioText}
+              onChange={(event) =>
+                setCandidateForm((prev) => ({
+                  ...prev,
+                  bioText: event.target.value,
+                }))
+              }
+              rows={5}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+              placeholder="จุดเด่น 1; จุดเด่น 2"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              แยกแต่ละข้อด้วยเครื่องหมาย `;` หรือขึ้นบรรทัดใหม่
+            </p>
+          </div>
+
+          {candidateFormError ? (
+            <p className="text-sm text-rose-600">{candidateFormError}</p>
+          ) : null}
+        </div>
+      </ModalShell>
+
+      <ImagePreviewModal
+        open={!!previewCandidate}
+        imageUrl={toDisplayAvatarUrl(
+          previewCandidate?.avatar,
+          previewCandidate?.name || "candidate",
+        )}
+        title={previewCandidate?.name || "candidate"}
+        subtitle={previewCandidate?.title}
+        onClose={() => setPreviewCandidate(null)}
+      />
     </AdminRoute>
   );
 }

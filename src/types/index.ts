@@ -3,6 +3,7 @@ export interface User {
     username: string;
     fullName: string;
     studentId?: string;
+    avatar?: string;
     mustChangePassword?: boolean;
     createdByAdminId?: string;
 }
@@ -73,6 +74,25 @@ export interface VoteRoom {
 export interface VoteResult {
     candidateId: string;
     voteCount: number;
+}
+
+export interface VoteParticipationRow {
+    userId: string;
+    username: string;
+    fullName: string;
+    hasVoted: boolean;
+    selectedIds: string[];
+    submittedAt: string | null;
+}
+
+export interface VoteResultsResponse {
+    results: VoteResult[];
+    participation: {
+        eligibleCount: number;
+        votedCount: number;
+        notVotedCount: number;
+        rows: VoteParticipationRow[];
+    };
 }
 
 export interface VoteRecord {

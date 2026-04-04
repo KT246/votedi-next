@@ -5,12 +5,14 @@ interface VoteStatusCardProps {
     voteRecord: VoteRecord | null;
     allowResultView: boolean;
     onViewResult?: () => void;
+    onEditVote?: () => void;
 }
 
 export default function VoteStatusCard({
     voteRecord,
     allowResultView,
     onViewResult,
+    onEditVote,
 }: VoteStatusCardProps) {
     const submittedTime = voteRecord?.submittedAt
         ? new Date(voteRecord.submittedAt).toLocaleString('lo-LA', { dateStyle: 'short', timeStyle: 'short' })
@@ -40,6 +42,13 @@ export default function VoteStatusCard({
                         className="mt-6 w-full max-w-xs rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
                     >
                         {'ເບິ່ງຜົນການເລືອກຕັ້ງ'}
+                    </button>
+                ) : onEditVote ? (
+                    <button
+                        onClick={onEditVote}
+                        className="mt-6 w-full max-w-xs rounded-xl border border-indigo-200 bg-indigo-50 py-3 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
+                    >
+                        {'ແກ້ໄຂຄະແນນ'}
                     </button>
                 ) : (
                     <div className="mt-6 w-full max-w-xs rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">

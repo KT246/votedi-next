@@ -16,6 +16,7 @@ interface ManagedUser {
   username: string;
   fullName: string;
   studentId: string;
+  avatar?: string;
   mustChangePassword?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -138,17 +139,30 @@ export default function AdminUsersPage() {
       selectedFilteredCount > 0 && !allFilteredSelected;
   }, [selectedFilteredCount, allFilteredSelected]);
 
-  const handleDownloadSample = () => {
-    const csv = [
-      "username,fullName,studentId",
-      "student01,Somsack Sivilay,20230001",
-      "student02,Khamla Vong,20230002",
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const handleDownloadUsers = () => {
+    const csv = (
+      Papa as unknown as {
+        unparse: (
+          data: Array<Record<string, string>>,
+          config?: { columns?: string[]; quotes?: boolean },
+        ) => string;
+      }
+    ).unparse(
+      users.map((user) => ({
+        username: user.username,
+        fullName: user.fullName,
+        studentId: user.studentId,
+      })),
+      {
+        columns: ["username", "fullName", "studentId"],
+        quotes: true,
+      },
+    );
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "users-sample.csv";
+    anchor.download = "users-export.csv";
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -449,11 +463,11 @@ export default function AdminUsersPage() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={handleDownloadSample}
+                  onClick={handleDownloadUsers}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   <Download className="h-4 w-4" />
-                  ດາວໂຫຼດຕົວຢ່າງ
+                  ดาวน์โหลดข้อมูลผู้ใช้
                 </button>
                 <button
                   type="button"
@@ -720,8 +734,8 @@ export default function AdminUsersPage() {
       <ModalShell
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingUser ? "ແກ້ໄຂຜູ້ໃຊ້" : "ສ້າງຜູ້ໃຊ້ໃໝ່"}
-        description="Username ແມ່ນໄວ້ເຂົ້າລະບົບ, student ID ແມ່ນລະຫັດຜ່ານເລີ່ມຕົ້ນ"
+        title={editingUser ? "ແກ້ໄຂຜູ້ໃຊ້" : "ເພີ່ມຜູ້ໃຊ້"}
+        description="Username, fullName, ແລະ student ID ຈະຖືກນຳໃຊ້ໃນລະບົບ"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -788,12 +802,11 @@ export default function AdminUsersPage() {
                 }
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span>ຕັ້ງລະຫັດຜ່ານໃຫ້ກັບໄປເປັນ student ID ອີກຄັ້ງ</span>
+              <span>ຕັ້ງລະຫັດຜ່ານໃໝ່ໃຫ້ຕົງກັບ student ID</span>
             </label>
           ) : (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-              ລະຫັດຜ່ານເລີ່ມຕົ້ນຈະຖືກ hash ຈາກ student ID
-              ແລະບັນຊີຈະຖືກບັງຄັບປ່ຽນລະຫັດຫຼັງຈາກເຂົ້າລະບົບຄັ້ງທຳອິດ
+              ລະຫັດຜ່ານຈະຖືກສ້າງເປັນ hash ຈາກ student ID ແລະສາມາດນຳໄປໃຊ້ເຂົ້າລະບົບໄດ້ທັນທີ
             </div>
           )}
 
@@ -816,7 +829,7 @@ export default function AdminUsersPage() {
                 ? "ກຳລັງບັນທຶກ..."
                 : editingUser
                   ? "ບັນທຶກການແກ້ໄຂ"
-                  : "ສ້າງຜູ້ໃຊ້"}
+                  : "ເພີ່ມຜູ້ໃຊ້"}
             </button>
           </div>
         </form>

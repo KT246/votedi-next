@@ -256,7 +256,7 @@ export default function VoteRoomPage() {
 
   function toggleCandidate(id: string) {
     if (roomInfo?.maxSelection === 1) {
-      setSelectedIds([id]);
+      setSelectedIds((prev) => (prev[0] === id ? [] : [id]));
       return;
     }
 
@@ -295,6 +295,21 @@ export default function VoteRoomPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleClearSelection() {
+    if (submitting) return;
+    setSelectedIds([]);
+    setShowConfirm(false);
+    setSubmitError("");
+  }
+
+  function handleEditVote() {
+    if (!voteRecord || roomInfo?.status !== "open") return;
+    setSelectedIds(voteRecord.selectedIds || []);
+    saveVoteRecord(null);
+    setShowConfirm(false);
+    setSubmitError("");
   }
 
   function handleOpenConfirm() {
@@ -348,6 +363,7 @@ export default function VoteRoomPage() {
             voteRecord={voteRecord}
             allowResultView={roomInfo.status === "closed"}
             onViewResult={() => router.push(`/vote-room/${roomCode}/result`)}
+            onEditVote={roomInfo.status === "open" ? handleEditVote : undefined}
           />
         </div>
       </div>
@@ -422,13 +438,24 @@ export default function VoteRoomPage() {
         ) : null}
 
         <div className="mb-4 flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-slate-700">
-            {"ລາຍຊື່ຜູ້ສະໝັກ"} ({candidates.length})
-          </p>
-          <StatusBadge
-            label={`${"ເລືອກແລ້ວ"} ${selectedIds.length}/${maxSelection}`}
-            tone={atMax ? "info" : "neutral"}
-          />
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-slate-700">
+              {"ລາຍຊື່ຜູ້ສະໝັກ"} ({candidates.length})
+            </p>
+            <StatusBadge
+              label={`${"ເລືອກແລ້ວ"} ${selectedIds.length}/${maxSelection}`}
+              tone={atMax ? "info" : "neutral"}
+            />
+          </div>
+          {hasSelected ? (
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              {"ລ້າງການເລືອກ"}
+            </button>
+          ) : null}
         </div>
 
         {maxSelection > 1 ? (

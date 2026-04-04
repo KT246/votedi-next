@@ -11,6 +11,7 @@ import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import StatusBadge from '../components/ui/StatusBadge';
 import { acquireSocket, joinSocketRoom, leaveSocketRoom, releaseSocket } from '../api/socketClient';
+import { onAvatarError, toDisplayAvatarUrl } from '../utils/avatar';
 
 const STATUS_LABELS: Record<string, string> = {
     open: 'ເປີດ',
@@ -223,9 +224,21 @@ export default function MyRoomsPage() {
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h1 className="text-2xl font-extrabold text-slate-900">{'ຫ້ອງເລືອກຕັ້ງຂອງຂ້ອຍ'}</h1>
-                        <p className="mt-1 text-sm text-slate-500">
-                            {mounted ? `ຍິນດີຕ້ອນຮັບ, ${user?.fullName || user?.username || '-'}` : 'ຍິນດີຕ້ອນຮັບ'}
-                        </p>
+                        {mounted ? (
+                            <div className="mt-2 flex items-center gap-3">
+                                <img
+                                    src={toDisplayAvatarUrl(user?.avatar, user?.fullName || user?.username || 'user')}
+                                    alt={user?.fullName || user?.username || 'user'}
+                                    onError={(event) => onAvatarError(event, user?.fullName || user?.username || 'user')}
+                                    className="h-11 w-11 rounded-2xl border border-slate-200 object-cover bg-slate-100"
+                                />
+                                <p className="text-sm text-slate-500">
+                                    {`ຍິນດີຕ້ອນຮັບ, ${user?.fullName || user?.username || '-'}`}
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="mt-1 text-sm text-slate-500">{'ຍິນດີຕ້ອນຮັບ'}</p>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         <button
