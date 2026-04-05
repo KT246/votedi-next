@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -14,10 +15,12 @@ import {
   Loader2,
   PencilLine,
   Plus,
+  QrCode,
   RefreshCw,
   Save,
   Trash2,
 } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 
 import AdminRoute from "../../../../components/AdminRoute";
 import EmptyState from "../../../../components/ui/EmptyState";
@@ -317,7 +320,16 @@ export default function AdminVoteRoomDetailPage() {
   } | null>(null);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsError, setResultsError] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const qrCanvasWrapRef = useRef<HTMLDivElement | null>(null);
   const roomKey = room?.id || room?.roomCode || roomId;
+  const roomJoinUrl =
+    mounted && room?.roomCode
+      ? `${window.location.origin}/vote-room/${encodeURIComponent(
+          room.roomCode,
+        )}`
+      : "";
 
   const syncFormFromRoom = (currentRoom: AdminRoom) => {
     setForm({
@@ -384,6 +396,10 @@ export default function AdminVoteRoomDetailPage() {
     void fetchRoom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchResults = async () => {
     if (!roomKey) return;
@@ -573,6 +589,19 @@ export default function AdminVoteRoomDetailPage() {
     XLSX.writeFile(workbook, "candidate-list.xlsx");
   };
 
+  const handleDownloadRoomQr = () => {
+    const canvas = qrCanvasWrapRef.current?.querySelector(
+      "canvas",
+    ) as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const filenameBase = room?.roomCode || room?.roomName || "room";
+
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `${filenameBase}-qr.png`;
+    link.click();
+  };
+
   const closeCandidateForm = () => {
     setCandidateFormOpen(false);
     setCandidateEditingIndex(null);
@@ -756,6 +785,15 @@ export default function AdminVoteRoomDetailPage() {
               <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-600">
                 {room.roomCode || "-"}
               </span>
+              <button
+                type="button"
+                onClick={() => setQrModalOpen(true)}
+                disabled={!room.roomCode}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <QrCode className="h-4 w-4" />
+                QR ຫ້ອງ
+              </button>
             </div>
           </div>
 
@@ -1463,6 +1501,56 @@ export default function AdminVoteRoomDetailPage() {
         subtitle={previewCandidate?.title}
         onClose={() => setPreviewCandidate(null)}
       />
+
+      <ModalShell
+        open={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        title="QR ຫ້ອງ"
+        description="ສະແກນ QR code ນີ້ເພື່ອເຂົ້າຫ້ອງໂຫວດໄດ້ທັນທີ"
+        maxWidthClass="max-w-lg"
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div
+              ref={qrCanvasWrapRef}
+              className="flex items-center justify-center rounded-2xl bg-white p-5"
+            >
+              {roomJoinUrl ? (
+                <QRCodeCanvas
+                  value={roomJoinUrl}
+                  size={240}
+                  level="M"
+                  includeMargin
+                />
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">{room.roomName}</p>
+            <p className="mt-1 text-slate-500">
+              ລະຫັດຫ້ອງ:{" "}
+              <a
+                href={roomJoinUrl || `/vote-room/${room.roomCode}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-indigo-600 underline decoration-indigo-300 underline-offset-2 transition-colors hover:text-indigo-700"
+              >
+                {roomJoinUrl || `/vote-room/${room.roomCode}`}
+              </a>
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDownloadRoomQr}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Download className="h-4 w-4" />
+            ດາວໂຫຼດ QR
+          </button>
+        </div>
+      </ModalShell>
     </AdminRoute>
   );
 }
