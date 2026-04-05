@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "../store/authStore";
+import { getValidStoredUserToken } from "../lib/userSession";
 
 export default function Home() {
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
@@ -17,11 +18,9 @@ export default function Home() {
 
     if (typeof window === "undefined") return;
     const token =
+      getValidStoredUserToken(localStorage) ||
       localStorage.getItem("userAccessToken") ||
-      localStorage.getItem("accessToken") ||
-      (localStorage.getItem("vote_session")
-        ? JSON.parse(localStorage.getItem("vote_session") || "{}").token
-        : null);
+      localStorage.getItem("accessToken");
 
     if (token) {
       router.replace("/my-rooms");

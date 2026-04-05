@@ -1,15 +1,17 @@
 "use client";
 
 import Link from 'next/link';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Eye, FilePenLine, Lock, Play, Trash2 } from 'lucide-react';
 
 import AdminRoute from '../../../components/AdminRoute';
+import { acquireSocket, joinSocketRoom, leaveSocketRoom, releaseSocket } from '../../../api/socketClient';
 import EmptyState from '../../../components/ui/EmptyState';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import StatusBadge from '../../../components/ui/StatusBadge';
 import { roomsApi } from '../../../api/roomsApi';
+import { useAdminAuthStore } from '../../../store/adminAuthStore';
 import type { VoteRoom } from '../../../types';
 
 type RoomStatus = VoteRoom['status'];
@@ -97,6 +99,7 @@ function formatDate(value?: string): string {
 }
 
 export default function AdminVoteRoomsPage() {
+    const adminId = useAdminAuthStore((state) => state.adminUser?.id || '');
     const [rooms, setRooms] = useState<AdminRoom[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -105,6 +108,7 @@ export default function AdminVoteRoomsPage() {
     const [deletingRoomId, setDeletingRoomId] = useState('');
     const [updatingRoomId, setUpdatingRoomId] = useState('');
     const [expandedRoomId, setExpandedRoomId] = useState('');
+    const reloadTimerRef = useRef<number | null>(null);
 
     const fetchRooms = useCallback(async () => {
         setLoading(true);
@@ -125,6 +129,48 @@ export default function AdminVoteRoomsPage() {
     useEffect(() => {
         void fetchRooms();
     }, [fetchRooms]);
+
+    useEffect(() => {
+        const socket = acquireSocket();
+        if (!socket) return;
+
+        const adminScope = 'admin:rooms';
+        const ownerScope = adminId ? `owner:${adminId}` : '';
+        joinSocketRoom(adminScope);
+        if (ownerScope) {
+            joinSocketRoom(ownerScope);
+        }
+
+        const scheduleReload = () => {
+            if (reloadTimerRef.current) {
+                window.clearTimeout(reloadTimerRef.current);
+            }
+
+            reloadTimerRef.current = window.setTimeout(() => {
+                void fetchRooms();
+                reloadTimerRef.current = null;
+            }, 300);
+        };
+
+        socket.on('rooms:status-changed', scheduleReload);
+
+        return () => {
+            socket.off('rooms:status-changed', scheduleReload);
+            leaveSocketRoom(adminScope);
+            if (ownerScope) {
+                leaveSocketRoom(ownerScope);
+            }
+            releaseSocket();
+        };
+    }, [adminId, fetchRooms]);
+
+    useEffect(() => {
+        return () => {
+            if (reloadTimerRef.current) {
+                window.clearTimeout(reloadTimerRef.current);
+            }
+        };
+    }, []);
 
     const filteredRooms = useMemo(() => {
         const q = search.trim().toLowerCase();

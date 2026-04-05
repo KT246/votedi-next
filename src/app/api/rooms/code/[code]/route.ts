@@ -31,10 +31,6 @@ function serializeRoom(room: RoomDocument) {
         status: room.status,
         allowResultView: room.allowResultView,
         candidates: room.candidates || [],
-        allowedUsers: room.allowedUsers || [],
-        ownerAdminId: room.ownerAdminId,
-        createdAt: room.createdAt?.toISOString?.() || '',
-        updatedAt: room.updatedAt?.toISOString?.() || '',
     };
 }
 
@@ -45,7 +41,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { code } = await params;
-    const room = await auth.db.collection<RoomDocument>('rooms').findOne({ roomCode: code });
+    const room = await auth.db.collection<RoomDocument>('rooms').findOne(
+        { roomCode: code },
+        {
+            projection: {
+                roomCode: 1,
+                roomName: 1,
+                description: 1,
+                startTime: 1,
+                endTime: 1,
+                timeMode: 1,
+                durationMinutes: 1,
+                voteType: 1,
+                maxSelection: 1,
+                status: 1,
+                allowResultView: 1,
+                candidates: 1,
+                ownerAdminId: 1,
+                createdAt: 1,
+                updatedAt: 1,
+            },
+        },
+    );
     if (!room) {
         return NextResponse.json({ message: 'Room not found' }, { status: 404 });
     }

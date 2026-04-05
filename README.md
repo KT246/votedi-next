@@ -12,7 +12,7 @@
 - Multi-select voting
 - Vote countdown and room closing logic
 - Result visibility after a room closes
-- Optional Socket.IO real-time updates
+- Optional Pusher real-time updates
 
 ## Tech Stack
 
@@ -23,7 +23,7 @@
 - JWT
 - Zustand
 - Tailwind CSS
-- Socket.IO (optional)
+- Pusher Channels (optional)
 
 ## Project Structure
 
@@ -46,7 +46,10 @@ Create a `.env` file in the project root:
 ```env
 MONGODB_URI=mongodb://localhost:27017/votedi
 JWT_SECRET=your-secret-key
-NEXT_PUBLIC_SOCKET_URL=
+PUSHER_APP_ID=
+PUSHER_SECRET=
+NEXT_PUBLIC_PUSHER_KEY=
+NEXT_PUBLIC_PUSHER_CLUSTER=
 ```
 
 Optional values used by the admin seed script:
@@ -132,7 +135,7 @@ Jane Doe,Project Manager,2026-03-31,"Achievement 1; Achievement 2",https://examp
 
 ## Notes
 
-- Socket.IO is optional. If `NEXT_PUBLIC_SOCKET_URL` is not set, the app runs without websocket connections.
+- Pusher realtime is optional. If the Pusher environment variables are not set, the app still runs without live updates.
 - The project currently contains both App Router and legacy Pages Router code during migration.
 - Room lifecycle logic is handled server-side so open, draft, and closed states stay consistent.
 

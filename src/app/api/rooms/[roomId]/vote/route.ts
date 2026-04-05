@@ -3,6 +3,10 @@ import { ObjectId } from 'mongodb';
 
 import { getAuthContext } from '@/lib/serverAuth';
 import { autoCloseExpiredRoom, getVoteRoomKeys } from '@/lib/roomLifecycle';
+import {
+    emitRoomProgressUpdated,
+    emitVoteNew,
+} from '@/lib/realtimeEmitter';
 
 type VoteDoc = {
     roomId: string;
@@ -15,6 +19,8 @@ type VoteDoc = {
 type RoomDocument = {
     _id?: ObjectId;
     roomCode?: string;
+    ownerAdminId?: string;
+    allowedUsers?: string[];
     status?: unknown;
     startTime?: Date | null;
     endTime?: Date | null;
@@ -85,6 +91,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             selectedIds,
             votedAt: new Date(),
         });
+
+        const voteKeys = getVoteRoomKeys(activeRoom, roomId);
+        const ballotCount = await votes.countDocuments({
+            roomId: { $in: voteKeys },
+        });
+        const totalVoters = Array.isArray(activeRoom.allowedUsers)
+            ? activeRoom.allowedUsers.length
+            : 0;
+
+        await Promise.allSettled([
+            emitVoteNew({
+                roomId: roomObjectId,
+                candidateId: selectedIds[0] || '',
+                selectedIds,
+                userId: auth.payload.id,
+                voteCount: ballotCount,
+            }),
+            emitRoomProgressUpdated({
+                roomId: roomObjectId,
+                totalVotes: ballotCount,
+                totalVoters,
+                votedUsers: ballotCount,
+                pendingUsers: Math.max(totalVoters - ballotCount, 0),
+                lastVoterId: auth.payload.id,
+                ownerAdminId: typeof activeRoom.ownerAdminId === 'string'
+                    ? activeRoom.ownerAdminId
+                    : '',
+            }),
+        ]);
 
         return NextResponse.json({
             success: true,

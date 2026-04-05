@@ -7,6 +7,10 @@ import {
   getRoomDeadline,
   getVoteRoomKeys,
 } from "@/lib/roomLifecycle";
+import {
+  emitRoomLifecycleChanged,
+  emitRoomResultsReset,
+} from "@/lib/realtimeEmitter";
 import type { Candidate, VoteRoom } from "@/types";
 
 type RoomDocument = Omit<
@@ -289,7 +293,22 @@ export async function PATCH(
     return NextResponse.json({ message: "Room not found" }, { status: 404 });
   }
 
-  return NextResponse.json(serializeRoom(updatedRoom));
+  const serializedRoom = serializeRoom(updatedRoom);
+
+  await emitRoomLifecycleChanged({
+    roomId: serializedRoom.id || serializedRoom.roomCode,
+    status: serializedRoom.status,
+    ownerAdminId: serializedRoom.ownerAdminId,
+  });
+
+  if (isClosedToResetStatus) {
+    await emitRoomResultsReset({
+      roomId: serializedRoom.id || serializedRoom.roomCode,
+      ownerAdminId: serializedRoom.ownerAdminId,
+    });
+  }
+
+  return NextResponse.json(serializedRoom);
 }
 
 export async function DELETE(
@@ -313,6 +332,12 @@ export async function DELETE(
   if (!result.deletedCount) {
     return NextResponse.json({ message: "Room not found" }, { status: 404 });
   }
+
+  await emitRoomLifecycleChanged({
+    roomId: currentRoom._id?.toString() || currentRoom.roomCode || roomId,
+    status: "deleted",
+    ownerAdminId: currentRoom.ownerAdminId,
+  });
 
   return NextResponse.json({ success: true });
 }

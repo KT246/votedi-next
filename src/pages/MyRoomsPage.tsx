@@ -127,11 +127,15 @@ export default function MyRoomsPage() {
         const ownerScopeId =
             normalizeRoomId(user?.createdByAdminId) ||
             normalizeRoomId((rooms[0] as { ownerAdminId?: unknown } | undefined)?.ownerAdminId);
+        const ownerScopeChannel = ownerScopeId ? `owner:${ownerScopeId}` : '';
         if (roomIds.length === 0 && !ownerScopeId) return;
 
         const socket = acquireSocket();
         if (!socket) return;
         roomIds.forEach((id) => joinSocketRoom(id));
+        if (ownerScopeChannel) {
+            joinSocketRoom(ownerScopeChannel);
+        }
 
         const scheduleReload = () => {
             if (reloadTimerRef.current) {
@@ -164,6 +168,9 @@ export default function MyRoomsPage() {
             socket.off('room:status-changed', handleRoomStatusChanged);
             socket.off('rooms:status-changed', handleRoomsStatusChanged);
             roomIds.forEach((id) => leaveSocketRoom(id));
+            if (ownerScopeChannel) {
+                leaveSocketRoom(ownerScopeChannel);
+            }
             releaseSocket();
         };
     }, [rooms, fetchMyRooms, user?.createdByAdminId]);

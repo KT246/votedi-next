@@ -6,8 +6,10 @@ export interface RoomStatusChangedPayload {
 
 export interface VoteNewPayload {
     roomId: string;
-    candidateId: string;
-    voteCount: number;
+    candidateId?: string;
+    voteCount?: number;
+    selectedIds?: string[];
+    userId?: string;
 }
 
 export interface RoomProgressUpdatedPayload {
@@ -17,8 +19,10 @@ export interface RoomProgressUpdatedPayload {
     votedUsers: number;
     pendingUsers: number;
     lastVoterId?: string;
+    ownerAdminId?: string;
 }
 
 export interface RoomResultsResetPayload {
     roomId: string;
+    ownerAdminId?: string;
 }

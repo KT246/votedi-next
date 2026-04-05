@@ -63,6 +63,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!auth) {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
+    const includeRows =
+        auth.payload.role === 'admin' ||
+        request.nextUrl.searchParams.get('includeRows') === '1';
 
     const { roomId } = await params;
     const room = await findRoomByKey(auth.db, roomId);
@@ -106,45 +109,57 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ),
     );
 
-    const eligibleObjectIds = allowedUsers
-        .filter((value) => ObjectId.isValid(value) && String(new ObjectId(value)) === value)
-        .map((value) => new ObjectId(value));
+    const allowedUserSet = new Set(allowedUsers);
+    const votedCount = Array.from(voteByUserId.keys()).filter((userId) => allowedUserSet.has(userId)).length;
+    const notVotedCount = allowedUsers.length - votedCount;
 
-    const userDocs = eligibleObjectIds.length > 0
-        ? await auth.db.collection<UserDoc>('users').find({ _id: { $in: eligibleObjectIds } }).toArray()
-        : [];
+    let rows: Array<{
+        userId: string;
+        username: string;
+        fullName: string;
+        hasVoted: boolean;
+        selectedIds: string[];
+        submittedAt: string | null;
+    }> | undefined;
 
-    const userMap = new Map(
-        userDocs.map((user) => [user._id?.toString() || '', user]),
-    );
+    if (includeRows) {
+        const eligibleObjectIds = allowedUsers
+            .filter((value) => ObjectId.isValid(value) && String(new ObjectId(value)) === value)
+            .map((value) => new ObjectId(value));
 
-    const rows = allowedUsers.map((userId) => {
-        const user = userMap.get(userId);
-        const vote = voteByUserId.get(userId);
-        return {
-            userId,
-            username: normalizeString(user?.username) || userId,
-            fullName: normalizeString(user?.fullName) || normalizeString(user?.username) || userId,
-            hasVoted: Boolean(vote),
-            selectedIds: Array.isArray(vote?.selectedIds)
-                ? vote.selectedIds.map((item: unknown) => normalizeString(item)).filter(Boolean)
-                : vote?.candidateId
-                    ? [normalizeString(vote.candidateId)]
-                    : [],
-            submittedAt: normalizeVoteAt(vote?.votedAt),
-        };
-    });
+        const userDocs = eligibleObjectIds.length > 0
+            ? await auth.db.collection<UserDoc>('users').find({ _id: { $in: eligibleObjectIds } }).toArray()
+            : [];
 
-    const votedCount = rows.filter((row) => row.hasVoted).length;
-    const notVotedCount = rows.length - votedCount;
+        const userMap = new Map(
+            userDocs.map((user) => [user._id?.toString() || '', user]),
+        );
+
+        rows = allowedUsers.map((userId) => {
+            const user = userMap.get(userId);
+            const vote = voteByUserId.get(userId);
+            return {
+                userId,
+                username: normalizeString(user?.username) || userId,
+                fullName: normalizeString(user?.fullName) || normalizeString(user?.username) || userId,
+                hasVoted: Boolean(vote),
+                selectedIds: Array.isArray(vote?.selectedIds)
+                    ? vote.selectedIds.map((item: unknown) => normalizeString(item)).filter(Boolean)
+                    : vote?.candidateId
+                        ? [normalizeString(vote.candidateId)]
+                        : [],
+                submittedAt: normalizeVoteAt(vote?.votedAt),
+            };
+        });
+    }
 
     return NextResponse.json({
         results,
         participation: {
-            eligibleCount: rows.length,
+            eligibleCount: allowedUsers.length,
             votedCount,
             notVotedCount,
-            rows,
+            ...(rows ? { rows } : {}),
         },
     });
 }

@@ -30,8 +30,6 @@ function serializeRoom(room: RoomDocument) {
         maxSelection: room.maxSelection,
         status: room.status,
         allowResultView: room.allowResultView,
-        candidates: room.candidates || [],
-        allowedUsers: room.allowedUsers || [],
         ownerAdminId: room.ownerAdminId,
         createdAt: room.createdAt?.toISOString?.() || '',
         updatedAt: room.updatedAt?.toISOString?.() || '',
@@ -58,7 +56,27 @@ export async function GET(request: NextRequest) {
         };
     }
 
-    const rooms = await auth.db.collection<RoomDocument>('rooms').find(query).sort({ updatedAt: -1 }).toArray();
+    const rooms = await auth.db.collection<RoomDocument>('rooms')
+        .find(query, {
+            projection: {
+                roomCode: 1,
+                roomName: 1,
+                description: 1,
+                startTime: 1,
+                endTime: 1,
+                timeMode: 1,
+                durationMinutes: 1,
+                voteType: 1,
+                maxSelection: 1,
+                status: 1,
+                allowResultView: 1,
+                ownerAdminId: 1,
+                createdAt: 1,
+                updatedAt: 1,
+            },
+        })
+        .sort({ updatedAt: -1 })
+        .toArray();
     const resolved = await Promise.all(rooms.map((room) => autoCloseExpiredRoom<RoomDocument>(auth.db, room)));
     return NextResponse.json(resolved.map(serializeRoom));
 }

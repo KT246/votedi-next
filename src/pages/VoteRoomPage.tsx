@@ -163,6 +163,18 @@ export default function VoteRoomPage() {
         return;
       void loadRoom(roomCode);
     },
+    onVoteNew: (data) => {
+      if (!roomCode || normalizeId(data.roomId) !== normalizeId(roomInfo?.id)) {
+        return;
+      }
+      void loadRoom(roomCode, { silent: true });
+    },
+    onRoomProgressUpdated: (data) => {
+      if (!roomCode || normalizeId(data.roomId) !== normalizeId(roomInfo?.id)) {
+        return;
+      }
+      void loadRoom(roomCode, { silent: true });
+    },
   });
 
   useEffect(() => {
@@ -239,8 +251,9 @@ export default function VoteRoomPage() {
     if (!roomCode || roomInfo?.status !== "open") return;
 
     const refreshTimer = window.setInterval(() => {
+      if (document.hidden) return;
       void loadRoom(roomCode, { silent: true });
-    }, 15000);
+    }, 60000);
 
     return () => window.clearInterval(refreshTimer);
   }, [loadRoom, roomCode, roomInfo?.status]);

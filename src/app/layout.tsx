@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_Lao } from "next/font/google";
 import "./globals.css";
+import UserSessionTimeoutWatcher from "../components/UserSessionTimeoutWatcher";
 
 const notoSansLao = Noto_Sans_Lao({
   variable: "--font-noto-sans-lao",
@@ -25,6 +26,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
+        <UserSessionTimeoutWatcher />
         {children}
       </body>
     </html>

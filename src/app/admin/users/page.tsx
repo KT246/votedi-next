@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Papa from "papaparse";
 import { Download, PencilLine, Plus, Trash2, Upload, X } from "lucide-react";
 
 import AdminRoute from "../../../components/AdminRoute";
@@ -140,24 +139,17 @@ export default function AdminUsersPage() {
   }, [selectedFilteredCount, allFilteredSelected]);
 
   const handleDownloadUsers = () => {
-    const csv = (
-      Papa as unknown as {
-        unparse: (
-          data: Array<Record<string, string>>,
-          config?: { columns?: string[]; quotes?: boolean },
-        ) => string;
-      }
-    ).unparse(
-      users.map((user) => ({
-        username: user.username,
-        fullName: user.fullName,
-        studentId: user.studentId,
-      })),
-      {
-        columns: ["username", "fullName", "studentId"],
-        quotes: true,
-      },
-    );
+    const escapeCsvValue = (value: string) => `"${String(value || "").replace(/"/g, '""')}"`;
+    const csv = [
+      ["username", "fullName", "studentId"].join(","),
+      ...users.map((user) =>
+        [
+          escapeCsvValue(user.username),
+          escapeCsvValue(user.fullName),
+          escapeCsvValue(user.studentId),
+        ].join(","),
+      ),
+    ].join("\n");
     const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -185,6 +177,7 @@ export default function AdminUsersPage() {
     setImporting(true);
 
     try {
+      const Papa = await import("papaparse");
       const parsed = await new Promise<{ data: Record<string, unknown>[] }>(
         (resolve, reject) => {
           Papa.parse<Record<string, unknown>>(file, {

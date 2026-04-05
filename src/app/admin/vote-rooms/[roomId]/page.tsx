@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -9,7 +10,6 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import * as XLSX from "xlsx";
 import {
   Download,
   Loader2,
@@ -20,7 +20,6 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
 
 import AdminRoute from "../../../../components/AdminRoute";
 import EmptyState from "../../../../components/ui/EmptyState";
@@ -30,6 +29,7 @@ import LoadingState from "../../../../components/ui/LoadingState";
 import ModalShell from "../../../../components/ui/ModalShell";
 import StatusBadge from "../../../../components/ui/StatusBadge";
 import { roomsApi } from "../../../../api/roomsApi";
+import { useRoomSocket } from "../../../../hooks/useRoomSocket";
 import type {
   Candidate,
   VoteParticipationRow,
@@ -37,6 +37,11 @@ import type {
   VoteRoom,
 } from "../../../../types";
 import { onAvatarError, toDisplayAvatarUrl } from "../../../../utils/avatar";
+
+const QRCodeCanvas = dynamic(
+  () => import("qrcode.react").then((mod) => mod.QRCodeCanvas),
+  { ssr: false },
+);
 
 type RoomStatus = "draft" | "open" | "closed";
 type RoomTimeMode = "duration" | "range";
@@ -463,6 +468,50 @@ export default function AdminVoteRoomDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, room?.id]);
 
+  useRoomSocket({
+    roomId: room?.id,
+    enabled: !!room?.id,
+    onRoomStatusChanged: (payload) => {
+      if (normalizeRoomId(payload.roomId) !== normalizeRoomId(room?.id)) return;
+
+      void fetchRoom();
+
+      if (activeTab !== "results") {
+        return;
+      }
+
+      const nextStatus = normalizeStatus(payload.status);
+      if (nextStatus === "closed") {
+        void fetchResults();
+        return;
+      }
+
+      if (nextStatus === "draft" || nextStatus === "open") {
+        setResults([]);
+        setResultsError("");
+        setParticipation(null);
+      }
+    },
+    onVoteNew: (payload) => {
+      if (normalizeRoomId(payload.roomId) !== normalizeRoomId(room?.id)) return;
+      if (activeTab === "results") {
+        void fetchResults();
+      }
+    },
+    onRoomProgressUpdated: (payload) => {
+      if (normalizeRoomId(payload.roomId) !== normalizeRoomId(room?.id)) return;
+      if (activeTab === "results") {
+        void fetchResults();
+      }
+    },
+    onRoomResultsReset: (payload) => {
+      if (normalizeRoomId(payload.roomId) !== normalizeRoomId(room?.id)) return;
+      setResults([]);
+      setResultsError("");
+      setParticipation(null);
+    },
+  });
+
   const mergedResults = useMemo(() => {
     const candidateMap = new Map(
       room?.candidates.map((candidate) => [candidate.id, candidate]) || [],
@@ -570,7 +619,7 @@ export default function AdminVoteRoomDetailPage() {
     }
   };
 
-  const handleDownloadCandidateListXlsx = () => {
+  const handleDownloadCandidateListXlsx = async () => {
     if (candidateDrafts.length === 0) return;
 
     const rows = candidateDrafts.map((candidate) => ({
@@ -583,6 +632,7 @@ export default function AdminVoteRoomDetailPage() {
       avatar: candidate.avatar || "",
     }));
 
+    const XLSX = await import("xlsx");
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Candidates");

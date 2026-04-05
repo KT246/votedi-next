@@ -2,6 +2,11 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { useAdminAuthStore } from '../store/adminAuthStore';
+import {
+  clearStoredUserSession,
+  getValidStoredUserToken,
+  USER_SESSION_KEY,
+} from '../lib/userSession';
 
 const API_URL = '/api';
 const USER_DEVICE_KEY = 'voterDeviceId';
@@ -18,6 +23,12 @@ function readSessionToken(key: string): string | null {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
+    if (key === USER_SESSION_KEY && parsed?.expiresAt && parsed.expiresAt <= Date.now()) {
+      clearStoredUserSession(sessionStorage);
+      clearStoredUserSession(localStorage);
+      useAuthStore.getState().logout();
+      return null;
+    }
     return parsed?.token || null;
   } catch {
     return null;
@@ -41,6 +52,7 @@ function resolveAccessToken(): string | null {
 
   return (
     localStorage.getItem('userAccessToken') ||
+    getValidStoredUserToken(localStorage) ||
     readSessionToken('vote_session') ||
     localStorage.getItem('accessToken')
   );

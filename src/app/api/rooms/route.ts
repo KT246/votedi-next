@@ -3,6 +3,7 @@ import { ObjectId, type Db } from 'mongodb';
 
 import { getAuthContext } from '@/lib/serverAuth';
 import { autoCloseExpiredRoom } from '@/lib/roomLifecycle';
+import { emitRoomLifecycleChanged } from '@/lib/realtimeEmitter';
 import type { Candidate, VoteRoom } from '@/types';
 
 type RoomDocument = Omit<VoteRoom, 'id' | 'startTime' | 'endTime' | 'candidates' | 'allowedUsers' | 'createdAt' | 'updatedAt'> & {
@@ -155,8 +156,17 @@ export async function POST(request: NextRequest) {
 
         const result = await auth.db.collection('rooms').insertOne(room);
         const created = await auth.db.collection<RoomDocument>('rooms').findOne({ _id: result.insertedId });
+        const serializedRoom = created
+            ? serializeRoom(created)
+            : serializeRoom({ ...room, _id: result.insertedId } as RoomDocument);
 
-        return NextResponse.json(created ? serializeRoom(created) : serializeRoom({ ...room, _id: result.insertedId } as RoomDocument), {
+        await emitRoomLifecycleChanged({
+            roomId: serializedRoom.id || serializedRoom.roomCode,
+            status: serializedRoom.status,
+            ownerAdminId: serializedRoom.ownerAdminId,
+        });
+
+        return NextResponse.json(serializedRoom, {
             status: 201,
         });
     } catch (error) {

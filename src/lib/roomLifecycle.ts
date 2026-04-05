@@ -1,10 +1,12 @@
 import { ObjectId } from 'mongodb';
+import { emitRoomLifecycleChanged } from './realtimeEmitter';
 
 type DateLike = Date | string | null | undefined;
 
 export type RoomLifecycleDocument = {
     _id?: ObjectId;
     roomCode?: string;
+    ownerAdminId?: string;
     status?: unknown;
     startTime?: DateLike;
     endTime?: DateLike;
@@ -94,5 +96,15 @@ export async function autoCloseExpiredRoom<T extends RoomLifecycleDocument>(
     });
 
     const updated = await db.collection('rooms').findOne(filter);
-    return updated || room;
+    const resolvedRoom = updated || room;
+    const normalizedRoomId = normalizeRoomKey(resolvedRoom._id) || normalizeRoomKey(resolvedRoom.roomCode);
+
+    if (normalizedRoomId) {
+        await emitRoomLifecycleChanged({
+            roomId: normalizedRoomId,
+            status: 'closed',
+            ownerAdminId: typeof resolvedRoom.ownerAdminId === 'string' ? resolvedRoom.ownerAdminId : '',
+        });
+    }
+    return resolvedRoom;
 }

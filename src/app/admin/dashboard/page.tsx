@@ -1,10 +1,12 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AdminRoute from '../../../components/AdminRoute';
+import { acquireSocket, joinSocketRoom, leaveSocketRoom, releaseSocket } from '../../../api/socketClient';
 import apiClient from '../../../lib/apiClient';
+import { useAdminAuthStore } from '../../../store/adminAuthStore';
 import type { VoteRoom } from '../../../types';
 
 interface AdminRoom extends VoteRoom {
@@ -47,9 +49,11 @@ function formatDate(value?: string): string {
 }
 
 export default function AdminDashboardPage() {
+    const adminId = useAdminAuthStore((state) => state.adminUser?.id || '');
     const [rooms, setRooms] = useState<AdminRoom[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const reloadTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         async function fetchRooms() {
@@ -67,6 +71,61 @@ export default function AdminDashboardPage() {
         }
 
         void fetchRooms();
+    }, []);
+
+    const refreshRooms = useCallback(async () => {
+        try {
+            const res = await apiClient.get('/rooms');
+            const mapped = Array.isArray(res.data) ? res.data.map(normalizeRoom) : [];
+            setRooms(mapped);
+            setError('');
+        } catch (err: unknown) {
+            const typedErr = err as { response?: { data?: { message?: string | string[] } }; message?: string };
+            const message = typedErr?.response?.data?.message;
+            setError(Array.isArray(message) ? message.join(', ') : message || typedErr?.message || 'ໂຫຼດຂໍ້ມູນຫ້ອງບໍ່ສຳເລັດ');
+        }
+    }, []);
+
+    useEffect(() => {
+        const socket = acquireSocket();
+        if (!socket) return;
+
+        const adminScope = 'admin:rooms';
+        const ownerScope = adminId ? `owner:${adminId}` : '';
+        joinSocketRoom(adminScope);
+        if (ownerScope) {
+            joinSocketRoom(ownerScope);
+        }
+
+        const scheduleReload = () => {
+            if (reloadTimerRef.current) {
+                window.clearTimeout(reloadTimerRef.current);
+            }
+
+            reloadTimerRef.current = window.setTimeout(() => {
+                void refreshRooms();
+                reloadTimerRef.current = null;
+            }, 300);
+        };
+
+        socket.on('rooms:status-changed', scheduleReload);
+
+        return () => {
+            socket.off('rooms:status-changed', scheduleReload);
+            leaveSocketRoom(adminScope);
+            if (ownerScope) {
+                leaveSocketRoom(ownerScope);
+            }
+            releaseSocket();
+        };
+    }, [adminId, refreshRooms]);
+
+    useEffect(() => {
+        return () => {
+            if (reloadTimerRef.current) {
+                window.clearTimeout(reloadTimerRef.current);
+            }
+        };
     }, []);
 
     const stats = useMemo(() => {
