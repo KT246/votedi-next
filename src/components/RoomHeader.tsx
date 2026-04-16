@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import apiClient from "../api/apiClient";
+import { formatLaoDateTime } from "../lib/formatLaoDate";
 import { useAuthStore } from "../store/authStore";
 import { useVoteRoomStore } from "../store/voteRoomStore";
 import { VoteStatus } from "../types";
@@ -50,13 +51,10 @@ const STATUS_CONFIG: Record<
 };
 
 function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("lo-LA", {
+  return formatLaoDateTime(value, {
     dateStyle: "short",
     timeStyle: "short",
-  }).format(date);
+  });
 }
 
 export default function RoomHeader() {

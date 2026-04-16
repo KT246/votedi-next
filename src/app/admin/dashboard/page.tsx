@@ -12,6 +12,7 @@ import {
 import AdminRoute from "../../../components/AdminRoute";
 import { acquireSocket, joinSocketRoom, leaveSocketRoom, releaseSocket } from "../../../api/socketClient";
 import apiClient from "../../../lib/apiClient";
+import { formatLaoDateTime } from "../../../lib/formatLaoDate";
 import { useAdminAuthStore } from "../../../store/adminAuthStore";
 import PageHeader from "../../../components/ui/PageHeader";
 import type { VoteRoom } from "../../../types";
@@ -52,13 +53,10 @@ function normalizeRoom(room: unknown): AdminRoom {
 }
 
 function formatDate(value?: string): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("lo-LA", {
+  return formatLaoDateTime(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date);
+  });
 }
 
 export default function AdminDashboardPage() {

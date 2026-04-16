@@ -18,6 +18,7 @@ import LoadingState from "../components/ui/LoadingState";
 import EmptyState from "../components/ui/EmptyState";
 import ErrorState from "../components/ui/ErrorState";
 import { useRoomSocket } from "../hooks/useRoomSocket";
+import { formatLaoDateTime } from "../lib/formatLaoDate";
 
 function normalizeId(raw: unknown): string {
   if (!raw) return "";
@@ -257,7 +258,7 @@ export default function ResultPage() {
             detailLines={
               currentUserHasVoted && voteRecord?.submittedAt
                 ? [
-                    `ເວລາທີ່ສົ່ງ: ${new Date(voteRecord.submittedAt).toLocaleString("lo-LA", {
+                    `ເວລາທີ່ສົ່ງ: ${formatLaoDateTime(voteRecord.submittedAt, {
                       dateStyle: "short",
                       timeStyle: "short",
                     })}`,

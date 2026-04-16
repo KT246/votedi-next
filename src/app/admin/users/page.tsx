@@ -11,6 +11,7 @@ import LoadingState from "../../../components/ui/LoadingState";
 import ModalShell from "../../../components/ui/ModalShell";
 import PageHeader from "../../../components/ui/PageHeader";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import { formatLaoDateTime } from "../../../lib/formatLaoDate";
 
 interface ManagedUser {
   id: string;
@@ -44,13 +45,10 @@ function normalizeUser(user: unknown): ManagedUser {
 }
 
 function formatDate(value?: string): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("lo-LA", {
+  return formatLaoDateTime(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date);
+  });
 }
 
 function normalizeImportRow(row: Record<string, unknown>) {
@@ -131,6 +129,12 @@ export default function AdminUsersPage() {
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const paginatedUsers = useMemo(() => {
     const startIndex = (safeCurrentPage - 1) * pageSize;
     return filteredUsers.slice(startIndex, startIndex + pageSize);
@@ -163,6 +167,18 @@ export default function AdminUsersPage() {
     }),
     [users.length, filteredUsers.length, selectedUserIds.length],
   );
+
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const visiblePages = new Set<number>([1, totalPages, safeCurrentPage]);
+    visiblePages.add(Math.max(1, safeCurrentPage - 1));
+    visiblePages.add(Math.min(totalPages, safeCurrentPage + 1));
+
+    return Array.from(visiblePages).sort((a, b) => a - b);
+  }, [safeCurrentPage, totalPages]);
 
   const resetForm = () => {
     setEditingUser(null);
@@ -638,8 +654,7 @@ export default function AdminUsersPage() {
                   </tbody>
                 </table>
 
-                {totalPages > 1 ? (
-                  <div className="flex items-center justify-between border-t border-[var(--admin-border)] px-4 py-3">
+                <div className="flex items-center justify-between border-t border-[var(--admin-border)] px-4 py-3">
                     <div className="text-sm text-[var(--admin-text)]">
                       ສະແດງ {(safeCurrentPage - 1) * pageSize + 1}-
                       {Math.min(safeCurrentPage * pageSize, filteredUsers.length)} ຈາກ{" "}
@@ -656,6 +671,38 @@ export default function AdminUsersPage() {
                       >
                         ກ່ອນໜ້າ
                       </button>
+                      <div className="flex items-center gap-1">
+                        {paginationItems.map((page, index) => {
+                          const previousPage = paginationItems[index - 1];
+                          const showEllipsis =
+                            typeof previousPage === "number" &&
+                            page - previousPage > 1;
+
+                          return (
+                            <div key={page} className="flex items-center gap-1">
+                              {showEllipsis ? (
+                                <span className="px-1 text-sm text-[var(--admin-text-muted)]">
+                                  ...
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => setCurrentPage(page)}
+                                aria-current={
+                                  safeCurrentPage === page ? "page" : undefined
+                                }
+                                className={
+                                  safeCurrentPage === page
+                                    ? "admin-btn-primary min-w-10 px-3 py-1.5"
+                                    : "admin-btn-secondary min-w-10 px-3 py-1.5"
+                                }
+                              >
+                                {page}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                       <span className="text-sm text-[var(--admin-text-muted)]">
                         ໜ້າ {safeCurrentPage} / {totalPages}
                       </span>
@@ -673,7 +720,6 @@ export default function AdminUsersPage() {
                       </button>
                     </div>
                   </div>
-                ) : null}
               </div>
             ) : null}
           </div>

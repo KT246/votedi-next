@@ -15,6 +15,8 @@ import {
 
 import { useAdminAuthStore } from "../../store/adminAuthStore";
 
+const SIDEBAR_WIDTH = "280px";
+
 const navItems = [
   {
     href: "/admin/dashboard",
@@ -51,19 +53,21 @@ export default function AdminLayout({
     () => true,
     () => false,
   );
+  const isLoginPage = currentPath === "/admin/login";
 
   useEffect(() => {
-    if (currentPath !== "/admin/login" && !adminUser) {
+    if (!hydrated) return;
+    if (!isLoginPage && !adminUser) {
       router.replace("/admin/login");
     }
-  }, [adminUser, currentPath, router]);
+  }, [adminUser, hydrated, isLoginPage, router]);
 
   const handleLogout = () => {
     logoutAdmin();
     router.push("/admin/login");
   };
 
-  if (currentPath === "/admin/login") {
+  if (isLoginPage) {
     return <>{children}</>;
   }
 
@@ -73,9 +77,12 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen bg-[var(--admin-bg)] text-[var(--admin-text)]">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-[280px] shrink-0 border-r border-[var(--admin-sidebar-border)] bg-[var(--admin-sidebar)] px-5 py-6 text-[var(--admin-sidebar-text)] lg:flex lg:flex-col">
-          <Link href="/admin/dashboard" className="block">
+      <aside
+        className="fixed inset-y-0 left-0 z-40 hidden border-r border-[var(--admin-sidebar-border)] bg-[var(--admin-sidebar)] text-[var(--admin-sidebar-text)] lg:flex lg:flex-col"
+        style={{ width: SIDEBAR_WIDTH }}
+      >
+        <div className="flex h-full flex-col overflow-y-auto px-5 py-6">
+          <Link href="/admin/dashboard" scroll={false} className="block">
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]">
@@ -104,6 +111,7 @@ export default function AdminLayout({
                 <Link
                   key={item.href}
                   href={item.href}
+                  scroll={false}
                   className={`admin-sidebar-link ${isActive ? "admin-sidebar-link-active" : ""}`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -130,68 +138,67 @@ export default function AdminLayout({
               {adminUser?.role || "admin"}
             </p>
           </div>
-        </aside>
-
-        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b border-[var(--admin-border)] bg-white/90 backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--admin-text-muted)]">
-                  ພື້ນທີ່ເຮັດວຽກແອັດມິນ
-                </p>
-                <p className="truncate text-sm text-[var(--admin-text)]">
-                  ຈັດການຫ້ອງ, ຜູ້ໃຊ້ ແລະ ຜົນໂຫວດໃນບ່ອນດຽວ
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href="/admin/change-password"
-                  className="admin-btn-secondary"
-                >
-                  <KeyRound className="h-4 w-4" />
-                  ປ່ຽນລະຫັດຜ່ານ
-                </Link>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="admin-btn-secondary"
-                >
-                  <LogOut className="h-4 w-4" />
-                  ອອກຈາກລະບົບ
-                </button>
-              </div>
-            </div>
-
-            <div className="border-t border-[var(--admin-border)] px-4 py-3 lg:hidden">
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {navItems.map((item) => {
-                  const isActive =
-                    currentPath === item.href ||
-                    currentPath.startsWith(`${item.href}/`);
-                  const Icon = item.icon;
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium ${
-                        isActive
-                          ? "border-[var(--admin-accent)] bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]"
-                          : "border-[var(--admin-border)] bg-white text-[var(--admin-text-muted)]"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          </header>
-
-          <main className="flex-1">{children}</main>
         </div>
+      </aside>
+
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:pl-[280px]">
+        <header className="sticky top-0 z-30 border-b border-[var(--admin-border)] bg-white/90 backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
+            <div className="min-w-0">
+              <p className="truncate text-sm text-[var(--admin-text)]">
+                ຈັດການຫ້ອງ, ຜູ້ໃຊ້ ແລະ ຜົນໂຫວດໃນບ່ອນດຽວ
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/admin/change-password"
+                scroll={false}
+                className="admin-btn-secondary"
+              >
+                <KeyRound className="h-4 w-4" />
+                ປ່ຽນລະຫັດຜ່ານ
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="admin-btn-secondary"
+              >
+                <LogOut className="h-4 w-4" />
+                ອອກຈາກລະບົບ
+              </button>
+            </div>
+          </div>
+
+          <div className="border-t border-[var(--admin-border)] px-4 py-3 lg:hidden">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {navItems.map((item) => {
+                const isActive =
+                  currentPath === item.href ||
+                  currentPath.startsWith(`${item.href}/`);
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    scroll={false}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium ${
+                      isActive
+                        ? "border-[var(--admin-accent)] bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]"
+                        : "border-[var(--admin-border)] bg-white text-[var(--admin-text-muted)]"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1">{children}</main>
       </div>
     </div>
   );

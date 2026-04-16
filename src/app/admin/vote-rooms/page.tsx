@@ -15,6 +15,7 @@ import { roomsApi } from "../../../api/roomsApi";
 import { useAdminAuthStore } from "../../../store/adminAuthStore";
 import type { VoteRoom } from "../../../types";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import { formatLaoDateTime } from "../../../lib/formatLaoDate";
 
 type RoomStatus = VoteRoom["status"];
 
@@ -100,13 +101,10 @@ function statusTone(status: RoomStatus): "info" | "warning" | "success" | "neutr
 }
 
 function formatDate(value?: string): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("lo-LA", {
+  return formatLaoDateTime(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date);
+  });
 }
 
 export default function AdminVoteRoomsPage() {

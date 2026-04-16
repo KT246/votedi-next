@@ -30,6 +30,7 @@ import ModalShell from "../../../../components/ui/ModalShell";
 import StatusBadge from "../../../../components/ui/StatusBadge";
 import { roomsApi } from "../../../../api/roomsApi";
 import { useRoomSocket } from "../../../../hooks/useRoomSocket";
+import { formatLaoDateTime } from "../../../../lib/formatLaoDate";
 import type {
   Candidate,
   VoteParticipationRow,
@@ -1475,9 +1476,7 @@ export default function AdminVoteRoomDetailPage() {
                                       </td>
                                       <td className="px-4 py-3 text-sm text-slate-600">
                                         {row.submittedAt
-                                          ? new Date(
-                                              row.submittedAt,
-                                            ).toLocaleString("lo-LA", {
+                                          ? formatLaoDateTime(row.submittedAt, {
                                               dateStyle: "short",
                                               timeStyle: "short",
                                             })
