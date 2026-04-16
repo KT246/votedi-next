@@ -1,10 +1,10 @@
-import { ObjectId } from 'mongodb';
+import { getRoomById, syncRoomResultsForRoom, updateRoom, type RoomRecord } from './firestoreData';
 import { emitRoomLifecycleChanged } from './realtimeEmitter';
 
 type DateLike = Date | string | null | undefined;
 
 export type RoomLifecycleDocument = {
-    _id?: ObjectId;
+    id?: string;
     roomCode?: string;
     ownerAdminId?: string;
     status?: unknown;
@@ -60,25 +60,7 @@ export function getRoomDeadline(room: Pick<RoomLifecycleDocument, 'startTime' | 
     return null;
 }
 
-export function getVoteRoomKeys(room: Pick<RoomLifecycleDocument, '_id' | 'roomCode'>, fallback: string): string[] {
-    const keys = new Set<string>();
-    const roomId = normalizeRoomKey(room._id);
-    const roomCode = normalizeRoomKey(room.roomCode);
-
-    if (fallback) keys.add(fallback);
-    if (roomId) keys.add(roomId);
-    if (roomCode) keys.add(roomCode);
-
-    return Array.from(keys);
-}
-
 export async function autoCloseExpiredRoom<T extends RoomLifecycleDocument>(
-    db: {
-        collection: (name: string) => {
-            updateOne: (filter: Record<string, unknown>, update: { $set: Record<string, unknown> }) => Promise<{ matchedCount: number }>;
-            findOne: (query: Record<string, unknown>) => Promise<T | null>;
-        };
-    },
     room: T,
 ): Promise<T> {
     const status = String(room.status || '').toLowerCase();
@@ -87,17 +69,20 @@ export async function autoCloseExpiredRoom<T extends RoomLifecycleDocument>(
     const deadline = getRoomDeadline(room);
     if (!deadline || Date.now() < deadline.getTime()) return room;
 
-    const filter: Record<string, unknown> = room._id ? { _id: room._id } : { roomCode: room.roomCode };
-    await db.collection('rooms').updateOne(filter, {
-        $set: {
-            status: 'closed',
-            updatedAt: new Date(),
-        },
+    const roomId = normalizeRoomKey(room.id);
+    if (!roomId) return room;
+
+    await updateRoom(roomId, {
+        status: 'closed',
+        updatedAt: new Date(),
     });
 
-    const updated = await db.collection('rooms').findOne(filter);
-    const resolvedRoom = updated || room;
-    const normalizedRoomId = normalizeRoomKey(resolvedRoom._id) || normalizeRoomKey(resolvedRoom.roomCode);
+    const updated = (await getRoomById(roomId)) as RoomRecord | null;
+    const resolvedRoom = (updated || room) as T;
+    if (updated) {
+        await syncRoomResultsForRoom(updated);
+    }
+    const normalizedRoomId = normalizeRoomKey(resolvedRoom.id) || normalizeRoomKey(resolvedRoom.roomCode);
 
     if (normalizedRoomId) {
         await emitRoomLifecycleChanged({

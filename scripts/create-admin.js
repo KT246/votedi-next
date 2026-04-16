@@ -1,51 +1,75 @@
-const { MongoClient } = require('mongodb');
-const bcrypt = require('bcryptjs');
+/* eslint-disable @typescript-eslint/no-require-imports */
+const bcrypt = require("bcryptjs");
+const { loadEnvConfig } = require("@next/env");
+const { cert, getApps, initializeApp } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/votedi';
+loadEnvConfig(process.cwd());
+
+function getAdminApp() {
+  if (getApps().length > 0) {
+    return getApps()[0];
+  }
+
+  const projectId = String(process.env.FIREBASE_PROJECT_ID || "").trim();
+  const clientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || "").trim();
+  const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || "")
+    .replace(/\\n/g, "\n")
+    .trim();
+  const storageBucket = String(process.env.FIREBASE_STORAGE_BUCKET || "").trim();
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      "Missing Firebase Admin configuration. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.",
+    );
+  }
+
+  return initializeApp({
+    credential: cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    }),
+    ...(storageBucket ? { storageBucket } : {}),
+  });
+}
 
 async function createAdmin() {
-    const client = new MongoClient(MONGODB_URI);
+  try {
+    const db = getFirestore(getAdminApp());
+    const adminsCollection = db.collection("admins");
 
-    try {
-        await client.connect();
-        console.log('Connected to MongoDB');
+    const username = process.env.ADMIN_USERNAME || "admin";
+    const password = process.env.ADMIN_PASSWORD || "admin123";
+    const fullName = process.env.ADMIN_FULL_NAME || "Administrator";
 
-        const db = client.db();
-        const adminsCollection = db.collection('admins');
+    const existing = await adminsCollection.get();
+    const batch = db.batch();
+    existing.docs.forEach((doc) => batch.delete(doc.ref));
 
-        const username = process.env.ADMIN_USERNAME || 'admin';
-        const password = process.env.ADMIN_PASSWORD || 'admin123';
-        const fullName = process.env.ADMIN_FULL_NAME || 'Administrator';
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const ref = adminsCollection.doc();
 
-        // Keep exactly one admin account in the collection.
-        await adminsCollection.deleteMany({});
+    batch.set(ref, {
+      username,
+      password: hashedPassword,
+      fullName,
+      role: "admin",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-        // Create new admin with bcrypt hash
-        const hashedPassword = await bcrypt.hash(password, 10);
+    await batch.commit();
 
-        const admin = {
-            username,
-            password: hashedPassword,
-            fullName,
-            role: 'admin',
-            permissions: null,
-            createdByAdminId: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-
-        const result = await adminsCollection.insertOne(admin);
-        console.log('Admin created successfully!');
-        console.log('ID:', result.insertedId);
-        console.log('Username:', username);
-        console.log('Password:', password);
-        console.log('Role: admin');
-
-    } catch (error) {
-        console.error('Error creating admin:', error);
-    } finally {
-        await client.close();
-    }
+    console.log("Admin created successfully!");
+    console.log("ID:", ref.id);
+    console.log("Username:", username);
+    console.log("Password:", password);
+    console.log("Role: admin");
+  } catch (error) {
+    console.error("Error creating admin:", error);
+    process.exitCode = 1;
+  }
 }
 
 createAdmin();

@@ -11,6 +11,7 @@ import ErrorState from '../components/ui/ErrorState';
 import StatusBadge from '../components/ui/StatusBadge';
 import { acquireSocket, joinSocketRoom, leaveSocketRoom, releaseSocket } from '../api/socketClient';
 import { onAvatarError, toDisplayAvatarUrl } from '../utils/avatar';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 const STATUS_LABELS: Record<string, string> = {
     open: 'ເປີດ',
@@ -81,6 +82,7 @@ export default function MyRoomsPage() {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const reloadTimerRef = useRef<number | null>(null);
     const prefetchedRoomsRef = useRef(new Set<string>());
+    const debouncedSearch = useDebouncedValue(search, 1000);
 
     const fetchMyRooms = useCallback(async () => {
         setLoading(true);
@@ -145,18 +147,41 @@ export default function MyRoomsPage() {
             }, 300);
         };
 
-        const handleRoomStatusChanged = (payload: { roomId?: unknown }) => {
+        const applyRoomStatusLocally = (payload: { roomId?: unknown; status?: unknown }): boolean => {
             const changedRoomId = normalizeRoomId(payload?.roomId);
-            if (!changedRoomId || !roomIds.includes(changedRoomId)) return;
-            scheduleReload();
+            if (!changedRoomId || !roomIds.includes(changedRoomId)) return false;
+
+            const nextStatus = normalizeStatus(payload?.status);
+            let foundRoom = false;
+
+            setRooms((prev) =>
+                prev.map((room) => {
+                    if (room.id !== changedRoomId) return room;
+                    foundRoom = true;
+                    if (room.status === nextStatus) return room;
+                    return { ...room, status: nextStatus };
+                }),
+            );
+
+            return foundRoom;
         };
 
-        const handleRoomsStatusChanged = (payload: { ownerAdminId?: unknown; roomId?: unknown }) => {
+        const handleRoomStatusChanged = (payload: { roomId?: unknown; status?: unknown }) => {
+            const applied = applyRoomStatusLocally(payload);
+            if (!applied) {
+                scheduleReload();
+            }
+        };
+
+        const handleRoomsStatusChanged = (payload: { ownerAdminId?: unknown; roomId?: unknown; status?: unknown }) => {
             const changedOwnerId = normalizeRoomId(payload?.ownerAdminId);
             if (ownerScopeId && changedOwnerId && changedOwnerId !== ownerScopeId) return;
             const changedRoomId = normalizeRoomId(payload?.roomId);
             if (!ownerScopeId && changedRoomId && !roomIds.includes(changedRoomId)) return;
-            scheduleReload();
+            const applied = applyRoomStatusLocally(payload);
+            if (!applied) {
+                scheduleReload();
+            }
         };
 
         socket.on('room:status-changed', handleRoomStatusChanged);
@@ -182,7 +207,7 @@ export default function MyRoomsPage() {
     }, []);
 
     const filteredRooms = useMemo(() => {
-        const q = search.trim().toLowerCase();
+        const q = debouncedSearch.trim().toLowerCase();
         return rooms.filter((room) => {
             if (statusFilter !== 'all' && room.status !== statusFilter) return false;
             if (!q) return true;
@@ -191,7 +216,7 @@ export default function MyRoomsPage() {
             const inDesc = (room.description || '').toLowerCase().includes(q);
             return inName || inCode || inDesc;
         });
-    }, [rooms, search, statusFilter]);
+    }, [rooms, debouncedSearch, statusFilter]);
 
     const statusFilters: Array<{ value: StatusFilter; label: string }> = [
         { value: 'all', label: 'ທັງໝົດ' },

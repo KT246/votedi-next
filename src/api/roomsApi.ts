@@ -1,6 +1,6 @@
 ﻿"use client";
 import apiClient from './apiClient';
-import { VoteRoom } from '../types';
+import { Candidate, VoteRoom } from '../types';
 
 // Room CRUD operations
 export const roomsApi = {
@@ -19,6 +19,18 @@ export const roomsApi = {
     updateStatus: (id: string, status: string) => apiClient.patch(`/rooms/${id}`, { status }),
 
     delete: (id: string) => apiClient.delete(`/rooms/${id}`),
+
+    // Candidate CRUD
+    getCandidates: (roomId: string) => apiClient.get(`/rooms/${roomId}/candidates`),
+
+    createCandidate: (roomId: string, data: Candidate) =>
+        apiClient.post(`/rooms/${roomId}/candidates`, data),
+
+    updateCandidate: (roomId: string, candidateId: string, data: Candidate) =>
+        apiClient.patch(`/rooms/${roomId}/candidates/${candidateId}`, data),
+
+    deleteCandidate: (roomId: string, candidateId: string) =>
+        apiClient.delete(`/rooms/${roomId}/candidates/${candidateId}`),
 
     // User management (allowed voters)
     addUser: (roomId: string, studentId: string, fullName: string) =>

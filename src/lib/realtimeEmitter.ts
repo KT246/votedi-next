@@ -1,56 +1,16 @@
-import Pusher from "pusher";
-
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import type {
   RoomProgressUpdatedPayload,
   RoomResultsResetPayload,
   RoomStatusChangedPayload,
-  VoteNewPayload,
 } from "@/api/socketEvents";
-import {
-  adminRoomsChannel,
-  ownerChannel,
-  roomChannel,
-  toRealtimeChannelName,
-} from "@/lib/realtimeChannels";
-
-let cachedPusher: Pusher | null | undefined;
-
-function normalizeString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : String(value || "").trim();
-}
-
-function getPusherServer(): Pusher | null {
-  if (cachedPusher !== undefined) return cachedPusher;
-
-  const appId = normalizeString(process.env.PUSHER_APP_ID);
-  const key = normalizeString(process.env.NEXT_PUBLIC_PUSHER_KEY);
-  const secret = normalizeString(process.env.PUSHER_SECRET);
-  const cluster = normalizeString(process.env.NEXT_PUBLIC_PUSHER_CLUSTER);
-
-  if (!appId || !key || !secret || !cluster) {
-    cachedPusher = null;
-    return cachedPusher;
-  }
-
-  cachedPusher = new Pusher({
-    appId,
-    key,
-    secret,
-    cluster,
-    useTLS: true,
-  });
-
-  return cachedPusher;
-}
+import { adminRoomsChannel, ownerChannel, roomChannel, toRealtimeChannelName } from "@/lib/realtimeChannels";
 
 async function triggerRealtimeEvent<T extends object>(
   event: string,
   payload: T,
   scopes: string[] = [],
 ): Promise<void> {
-  const pusher = getPusherServer();
-  if (!pusher) return;
-
   const channelNames = new Set<string>();
 
   for (const scope of scopes) {
@@ -77,7 +37,25 @@ async function triggerRealtimeEvent<T extends object>(
   if (channelNames.size === 0) return;
 
   try {
-    await pusher.trigger(Array.from(channelNames), event, payload);
+    const db = getAdminDb();
+    const batch = db.batch();
+    const createdAt = new Date();
+
+    for (const channelName of channelNames) {
+      const ref = db
+        .collection("realtime_channels")
+        .doc(channelName)
+        .collection("events")
+        .doc();
+
+      batch.set(ref, {
+        event,
+        payload,
+        createdAt,
+      });
+    }
+
+    await batch.commit();
   } catch (error) {
     console.error(`[realtime] failed to emit ${event}:`, error);
   }
@@ -104,10 +82,6 @@ export async function emitRoomLifecycleChanged(
     emitRoomStatusChanged(payload),
     emitRoomsStatusChanged(payload),
   ]);
-}
-
-export async function emitVoteNew(payload: VoteNewPayload): Promise<void> {
-  await triggerRealtimeEvent("vote:new", payload);
 }
 
 export async function emitRoomProgressUpdated(

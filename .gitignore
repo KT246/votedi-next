@@ -49,3 +49,4 @@ next-env.d.ts
 fix-*.ps1
 inline*.js
 test-inline.js
+*-firebase-adminsdk-*.json

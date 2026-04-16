@@ -45,13 +45,15 @@ const QRCodeCanvas = dynamic(
 
 type RoomStatus = "draft" | "open" | "closed";
 type RoomTimeMode = "duration" | "range";
-type DetailTab = "import" | "results";
+type DetailTab = "room" | "candidates" | "results";
 
-interface AdminRoom extends VoteRoom {
+type AdminRoom = Omit<VoteRoom, "candidates" | "allowedUsers"> & {
+  candidates: Candidate[];
+  allowedUsers: unknown[];
   createdAt?: string;
   updatedAt?: string;
   ownerAdminId?: string;
-}
+};
 
 interface RoomFormState {
   roomName: string;
@@ -133,16 +135,6 @@ function fromDatetimeLocal(value: string): string | null {
   return date.toISOString();
 }
 
-function formatDate(value?: string): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("lo-LA", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
 function statusTone(
   status: RoomStatus,
 ): "info" | "warning" | "success" | "neutral" {
@@ -151,11 +143,11 @@ function statusTone(
   return "neutral";
 }
 
-const STATUS_LABELS: Record<RoomStatus, string> = {
-  draft: "ຮ່າງ",
-  open: "ເປີດ",
-  closed: "ປິດ",
-};
+function roomStatusLabel(status: RoomStatus): string {
+  if (status === "open") return "ເປີດ";
+  if (status === "closed") return "ປິດ";
+  return "ຮ່າງ";
+}
 
 function normalizeBio(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -181,7 +173,7 @@ function normalizeCandidate(item: unknown, index: number): Candidate {
   const row = item as CandidateRow;
   const bio = normalizeBio(row.bio);
   const name =
-    normalizeString(row.name || row.fullName) || `Candidate ${index + 1}`;
+    normalizeString(row.name || row.fullName) || `ຜູ້ສະໝັກ ${index + 1}`;
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -274,7 +266,11 @@ function normalizeRoom(room: unknown, fallbackId = ""): AdminRoom {
     maxSelection: typeof item.maxSelection === "number" ? item.maxSelection : 1,
     status: normalizeStatus(item.status),
     allowResultView: Boolean(item.allowResultView),
-    candidates: Array.isArray(item.candidates) ? item.candidates : [],
+    candidates: Array.isArray(item.candidates)
+      ? item.candidates.map((candidate, index) =>
+          normalizeCandidate(candidate, index),
+        )
+      : [],
     allowedUsers: Array.isArray(item.allowedUsers) ? item.allowedUsers : [],
     ownerAdminId: normalizeRoomId(item.ownerAdminId),
     createdAt: item.createdAt ? String(item.createdAt) : undefined,
@@ -290,7 +286,7 @@ export default function AdminVoteRoomDetailPage() {
   const [room, setRoom] = useState<AdminRoom | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<DetailTab>("import");
+  const [activeTab, setActiveTab] = useState<DetailTab>("room");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -356,18 +352,12 @@ export default function AdminVoteRoomDetailPage() {
           : 1,
       allowResultView: Boolean(currentRoom.allowResultView),
     });
-    setCandidateDrafts(
-      Array.isArray(currentRoom.candidates)
-        ? currentRoom.candidates.map((item, index) =>
-            normalizeCandidate(item, index),
-          )
-        : [],
-    );
+    setCandidateDrafts(currentRoom.candidates);
   };
 
   const fetchRoom = async () => {
     if (!roomId) {
-      setError("Room not found");
+      setError("ບໍ່ພົບຫ້ອງ");
       setLoading(false);
       return;
     }
@@ -492,12 +482,6 @@ export default function AdminVoteRoomDetailPage() {
         setParticipation(null);
       }
     },
-    onVoteNew: (payload) => {
-      if (normalizeRoomId(payload.roomId) !== normalizeRoomId(room?.id)) return;
-      if (activeTab === "results") {
-        void fetchResults();
-      }
-    },
     onRoomProgressUpdated: (payload) => {
       if (normalizeRoomId(payload.roomId) !== normalizeRoomId(room?.id)) return;
       if (activeTab === "results") {
@@ -512,15 +496,18 @@ export default function AdminVoteRoomDetailPage() {
     },
   });
 
-  const mergedResults = useMemo(() => {
-    const candidateMap = new Map(
-      room?.candidates.map((candidate) => [candidate.id, candidate]) || [],
+  const mergedResults = useMemo<
+    Array<{ candidate: Candidate; voteCount: number }>
+  >(() => {
+    const candidates = room?.candidates || [];
+    const candidateMap = new Map<string, Candidate>(
+      candidates.map((candidate) => [candidate.id, candidate]),
     );
     const resultMap = new Map(
       results.map((item) => [item.candidateId, item.voteCount]),
     );
     const orderedCandidateIds = new Set<string>();
-    const rows = (room?.candidates || []).map((candidate) => {
+    const rows = candidates.map((candidate) => {
       orderedCandidateIds.add(candidate.id);
       return {
         candidate,
@@ -619,26 +606,6 @@ export default function AdminVoteRoomDetailPage() {
     }
   };
 
-  const handleDownloadCandidateListXlsx = async () => {
-    if (candidateDrafts.length === 0) return;
-
-    const rows = candidateDrafts.map((candidate) => ({
-      name: candidate.name || "",
-      title: candidate.title || "",
-      date: candidate.date || "",
-      bio: candidate.bio?.length
-        ? candidate.bio.join("; ")
-        : candidate.fullProfile || "",
-      avatar: candidate.avatar || "",
-    }));
-
-    const XLSX = await import("xlsx");
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Candidates");
-    XLSX.writeFile(workbook, "candidate-list.xlsx");
-  };
-
   const handleDownloadRoomQr = () => {
     const canvas = qrCanvasWrapRef.current?.querySelector(
       "canvas",
@@ -675,8 +642,29 @@ export default function AdminVoteRoomDetailPage() {
     setCandidateFormOpen(true);
   };
 
-  const persistCandidateDrafts = async (
-    nextCandidates: Candidate[],
+  const syncCandidateCollection = (rows: unknown[]) => {
+    const normalized = Array.isArray(rows)
+      ? rows.map((item, index) => normalizeCandidate(item, index))
+      : [];
+    setCandidateDrafts(normalized);
+    setRoom((prev) =>
+      prev
+        ? {
+            ...prev,
+            candidates: normalized,
+          }
+        : prev,
+    );
+  };
+
+  const reloadCandidates = async () => {
+    if (!roomKey) return;
+    const res = await roomsApi.getCandidates(roomKey);
+    syncCandidateCollection(res.data);
+  };
+
+  const createCandidate = async (
+    nextCandidate: Candidate,
     successMessage: string,
   ) => {
     if (!room || !roomKey) return false;
@@ -686,17 +674,8 @@ export default function AdminVoteRoomDetailPage() {
     setCandidateStatusError("");
 
     try {
-      const res = await roomsApi.update(roomKey, {
-        candidates: nextCandidates,
-      } as Partial<VoteRoom>);
-      const updated = normalizeRoom(res.data, roomKey);
-      setRoom(updated);
-      syncFormFromRoom(updated);
-      setCandidateDrafts(
-        updated.candidates.map((item, index) =>
-          normalizeCandidate(item, index),
-        ),
-      );
+      await roomsApi.createCandidate(roomKey, nextCandidate);
+      await reloadCandidates();
       setCandidateStatusMessage(successMessage);
       return true;
     } catch (err: unknown) {
@@ -708,7 +687,72 @@ export default function AdminVoteRoomDetailPage() {
       setCandidateStatusError(
         Array.isArray(message)
           ? message.join(", ")
-          : message || typedErr?.message || "ບໍ່ສາມາດບັນທຶກ candidate ໄດ້",
+          : message || typedErr?.message || "ບໍ່ສາມາດບັນທຶກຜູ້ສະໝັກໄດ້",
+      );
+      return false;
+    } finally {
+      setCandidateSaving(false);
+    }
+  };
+
+  const updateCandidate = async (
+    candidateId: string,
+    nextCandidate: Candidate,
+    successMessage: string,
+  ) => {
+    if (!room || !roomKey) return false;
+
+    setCandidateSaving(true);
+    setCandidateStatusMessage("");
+    setCandidateStatusError("");
+
+    try {
+      await roomsApi.updateCandidate(roomKey, candidateId, nextCandidate);
+      await reloadCandidates();
+      setCandidateStatusMessage(successMessage);
+      return true;
+    } catch (err: unknown) {
+      const typedErr = err as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const message = typedErr?.response?.data?.message;
+      setCandidateStatusError(
+        Array.isArray(message)
+          ? message.join(", ")
+          : message || typedErr?.message || "ບໍ່ສາມາດບັນທຶກຜູ້ສະໝັກໄດ້",
+      );
+      return false;
+    } finally {
+      setCandidateSaving(false);
+    }
+  };
+
+  const deleteCandidate = async (
+    candidateId: string,
+    successMessage: string,
+  ) => {
+    if (!room || !roomKey) return false;
+
+    setCandidateSaving(true);
+    setCandidateStatusMessage("");
+    setCandidateStatusError("");
+
+    try {
+      await roomsApi.deleteCandidate(roomKey, candidateId);
+      await reloadCandidates();
+      setCandidateStatusMessage(successMessage);
+      return true;
+    } catch (err: unknown) {
+      const typedErr = err as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const message = typedErr?.response?.data?.message;
+      setCandidateStatusError(
+        Array.isArray(message)
+          ? message.join(", ")
+          : message || typedErr?.message || "ບໍ່ສາມາດລົບຜູ້ສະໝັກໄດ້",
       );
       return false;
     } finally {
@@ -719,7 +763,7 @@ export default function AdminVoteRoomDetailPage() {
   const handleSaveCandidateDraft = async () => {
     const name = normalizeString(candidateForm.name);
     if (!name) {
-      setCandidateFormError("ກະລຸນາປ້ອນຊື່ candidate");
+      setCandidateFormError("ກະລຸນາປ້ອນຊື່ຜູ້ສະໝັກ");
       return;
     }
 
@@ -736,19 +780,17 @@ export default function AdminVoteRoomDetailPage() {
       fallbackId,
       existingCandidate?.voteCount || 0,
     );
-    const nextCandidates =
+    const saved =
       existingIndex === null
-        ? [...candidateDrafts, nextCandidate]
-        : candidateDrafts.map((item, index) =>
-            index === existingIndex ? nextCandidate : item,
+        ? await createCandidate(
+            nextCandidate,
+            `ເພີ່ມຜູ້ສະໝັກ "${name}" ແລ້ວ`,
+          )
+        : await updateCandidate(
+            fallbackId,
+            nextCandidate,
+            `ບັນທຶກຜູ້ສະໝັກ "${name}" ແລ້ວ`,
           );
-
-    const saved = await persistCandidateDrafts(
-      nextCandidates,
-      existingIndex === null
-        ? `ເພີ່ມ candidate "${name}" ແລ້ວ`
-        : `ບັນທຶກ candidate "${name}" ແລ້ວ`,
-    );
     if (saved) closeCandidateForm();
   };
 
@@ -757,16 +799,13 @@ export default function AdminVoteRoomDetailPage() {
     if (!candidate) return;
 
     const confirmed = window.confirm(
-      `ຕ້ອງການລົບ candidate "${candidate.name}" ຫຼືບໍ?`,
+      `ຕ້ອງການລົບຜູ້ສະໝັກ "${candidate.name}" ຫຼືບໍ?`,
     );
     if (!confirmed) return;
 
-    const nextCandidates = candidateDrafts.filter(
-      (_, candidateIndex) => candidateIndex !== index,
-    );
-    const saved = await persistCandidateDrafts(
-      nextCandidates,
-      `ລົບ candidate "${candidate.name}" ແລ້ວ`,
+    const saved = await deleteCandidate(
+      candidate.id,
+      `ລົບຜູ້ສະໝັກ "${candidate.name}" ແລ້ວ`,
     );
     if (!saved) return;
 
@@ -788,15 +827,15 @@ export default function AdminVoteRoomDetailPage() {
   if (error || !room) {
     return (
       <AdminRoute>
-        <div className="min-h-screen bg-slate-50 p-6">
-          <div className="mx-auto max-w-5xl">
+        <div className="admin-page">
+          <div className="admin-page-container max-w-5xl">
             <ErrorState
               title="ໂຫຼດຫ້ອງບໍ່ສຳເລັດ"
-              description={error || "Room not found"}
+              description={error || "ບໍ່ພົບຫ້ອງ"}
               action={
                 <Link
                   href="/admin/vote-rooms"
-                  className="inline-flex rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+                  className="admin-btn-primary"
                 >
                   ກັບໄປລາຍການ
                 </Link>
@@ -809,8 +848,9 @@ export default function AdminVoteRoomDetailPage() {
   }
   return (
     <AdminRoute>
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
+      <div>
+        <div className="admin-page">
+          <div className="admin-page-container max-w-none space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <Link
@@ -824,12 +864,12 @@ export default function AdminVoteRoomDetailPage() {
                 {room.roomName || "ລາຍລະອຽດຫ້ອງ"}
               </h1>
               <p className="mt-1 text-slate-500">
-                ແກ້ໄຂຂໍ້ມູນຫ້ອງ, ນຳເຂົ້າ candidate ແລະເບິ່ງຜົນໄດ້ຈາກໜ້ານີ້
+                ແກ້ໄຂຂໍ້ມູນຫ້ອງ, ຈັດການຜູ້ສະໝັກ ແລະ ເບິ່ງຜົນໄດ້ຈາກໜ້ານີ້
               </p>
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge
-                label={normalizeStatus(room.status)}
+                label={roomStatusLabel(normalizeStatus(room.status))}
                 tone={statusTone(normalizeStatus(room.status))}
               />
               <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-600">
@@ -839,7 +879,7 @@ export default function AdminVoteRoomDetailPage() {
                 type="button"
                 onClick={() => setQrModalOpen(true)}
                 disabled={!room.roomCode}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="admin-btn-secondary"
               >
                 <QrCode className="h-4 w-4" />
                 QR ຫ້ອງ
@@ -848,274 +888,316 @@ export default function AdminVoteRoomDetailPage() {
           </div>
 
           {saveMessage ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="admin-notice-success">
               {saveMessage}
             </div>
           ) : null}
           {saveError ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="admin-notice-danger">
               {saveError}
             </div>
           ) : null}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,0.85fr)]">
-            <form
-              onSubmit={handleSaveRoom}
-              className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                ແກ້ໄຂຂໍ້ມູນຫ້ອງ
-              </div>
+          <div className="grid gap-4 lg:grid-cols-4">
+            <div className="admin-stat-card p-5">
+              <p className="text-sm text-[var(--admin-text-muted)]">ສະຖານະ</p>
+              <p className="mt-2 text-2xl font-bold capitalize text-[var(--admin-text)]">
+                {roomStatusLabel(normalizeStatus(room.status))}
+              </p>
+            </div>
+            <div className="admin-stat-card p-5">
+              <p className="text-sm text-[var(--admin-text-muted)]">ຜູ້ສະໝັກ</p>
+              <p className="mt-2 text-2xl font-bold text-[var(--admin-text)]">
+                {candidateDrafts.length}
+              </p>
+            </div>
+            <div className="admin-stat-card p-5">
+              <p className="text-sm text-[var(--admin-text-muted)]">ເລືອກສູງສຸດ</p>
+              <p className="mt-2 text-2xl font-bold text-[var(--admin-text)]">
+                {form.maxSelection}
+              </p>
+            </div>
+            <div className="admin-stat-card p-5">
+              <p className="text-sm text-[var(--admin-text-muted)]">ຄະແນນລວມ</p>
+              <p className="mt-2 text-2xl font-bold text-[var(--admin-text)]">
+                {totalVotes}
+              </p>
+            </div>
+          </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  ຊື່ຫ້ອງ
-                </label>
-                <input
-                  value={form.roomName}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      roomName: event.target.value,
-                    }))
-                  }
-                  required
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  ຄຳອະທິບາຍ
-                </label>
-                <textarea
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      description: event.target.value,
-                    }))
-                  }
-                  rows={4}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
+          <div className="admin-card overflow-hidden">
+            <div className="border-b border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-6 py-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    ສະຖານະ
-                  </label>
-                  <select
-                    value={form.status}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        status: event.target.value as RoomStatus,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                  >
-                    <option value="draft">ຮ່າງ</option>
-                    <option value="open">ເປີດ</option>
-                    <option value="closed">ປິດ</option>
-                  </select>
+                  <h2 className="text-lg font-semibold text-[var(--admin-text)]">
+                    ພື້ນທີ່ຈັດການຫ້ອງ
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
+                    ຈັດການຫ້ອງ, ລາຍຊື່ຜູ້ສະໝັກ ແລະ ຜົນໃນໜ້າດຽວ
+                  </p>
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    ຮູບແບບການໂຫວດ
-                  </label>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700">
-                    ເລືອກຫຼາຍຄົນ
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    ຮູບແບບເວລາ
-                  </label>
-                  <select
-                    value={form.timeMode}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        timeMode: event.target.value as RoomTimeMode,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                  >
-                    <option value="duration">ກຳນົດໄລຍະເວລາ</option>
-                    <option value="range">ກຳນົດວັນເວລາ</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    ຈຳນວນເລືອກສູງສຸດ
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.maxSelection}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        maxSelection: Number(event.target.value) || 1,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {form.timeMode === "duration" ? (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    ໄລຍະເວລາ (ນາທີ)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.durationMinutes}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        durationMinutes: Number(event.target.value) || 60,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                  />
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      ເລີ່ມຕົ້ນ
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={form.startTime}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          startTime: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      ສິ້ນສຸດ
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={form.endTime}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          endTime: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={form.allowResultView}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      allowResultView: event.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span className="text-sm text-slate-700">
-                  ອະນຸຍາດໃຫ້ເບິ່ງຜົນ
-                </span>
-              </label>
-
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  {saving ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກ"}
-                </button>
-              </div>
-            </form>
-
-            <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-6 pt-6">
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setActiveTab("import")}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-                      activeTab === "import"
-                        ? "bg-indigo-600 text-white"
+                    onClick={() => setActiveTab("room")}
+                    className={`admin-tab-button ${
+                      activeTab === "room"
+                        ? "admin-tab-button-active"
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                     }`}
                   >
-                    ຈັດການຜູ້ສະໝັກ
+                    ຂໍ້ມູນຫ້ອງ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("candidates")}
+                    className={`admin-tab-button ${
+                      activeTab === "candidates"
+                        ? "admin-tab-button-active"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    ຜູ້ສະໝັກ
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab("results")}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                    className={`admin-tab-button ${
                       activeTab === "results"
-                        ? "bg-indigo-600 text-white"
+                        ? "admin-tab-button-active"
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                     }`}
                   >
-                    ເບິ່ງຜົນຄະແນນ
+                    ຜົນຄະແນນ
                   </button>
                 </div>
               </div>
+            </div>
 
-              <div className="p-6">
-                {activeTab === "import" ? (
-                  <div className="space-y-5">
-                    <div>
-                      <div className="flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={handleDownloadCandidateListXlsx}
-                          disabled={candidateDrafts.length === 0}
-                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                        >
-                          <Download className="h-4 w-4" />
-                          ດາວໂຫຼດລາຍຊື່ຂໍ້ມູນ
-                        </button>
+            <div className="p-6">
+              {activeTab === "room" ? (
+                <form onSubmit={handleSaveRoom} className="space-y-5">
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+                    <div className="space-y-5">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          ຊື່ຫ້ອງ
+                        </label>
+                        <input
+                          value={form.roomName}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              roomName: event.target.value,
+                            }))
+                          }
+                          required
+                          className="admin-input"
+                        />
                       </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          ຄຳອະທິບາຍ
+                        </label>
+                        <textarea
+                          value={form.description}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              description: event.target.value,
+                            }))
+                          }
+                          rows={6}
+                          className="admin-textarea"
+                        />
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">
+                            ສະຖານະ
+                          </label>
+                          <select
+                            value={form.status}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                status: event.target.value as RoomStatus,
+                              }))
+                            }
+                            className="admin-select"
+                          >
+                            <option value="draft">ຮ່າງ</option>
+                            <option value="open">ເປີດ</option>
+                            <option value="closed">ປິດ</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">
+                            ຮູບແບບການໂຫວດ
+                          </label>
+                          <div className="admin-card-muted px-3 py-2.5 text-sm font-semibold text-slate-700">
+                            ເລືອກຫຼາຍຄົນ
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-5">
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">
+                            ຮູບແບບເວລາ
+                          </label>
+                          <select
+                            value={form.timeMode}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                timeMode: event.target.value as RoomTimeMode,
+                              }))
+                            }
+                            className="admin-select"
+                          >
+                            <option value="duration">ກຳນົດໄລຍະເວລາ</option>
+                            <option value="range">ກຳນົດວັນເວລາ</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">
+                            ຈຳນວນເລືອກສູງສຸດ
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={form.maxSelection}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                maxSelection: Number(event.target.value) || 1,
+                              }))
+                            }
+                            className="admin-input"
+                          />
+                        </div>
+                      </div>
+
+                      {form.timeMode === "duration" ? (
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">
+                            ໄລຍະເວລາ (ນາທີ)
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={form.durationMinutes}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                durationMinutes: Number(event.target.value) || 60,
+                              }))
+                            }
+                            className="admin-input"
+                          />
+                        </div>
+                      ) : (
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-slate-700">
+                              ເລີ່ມຕົ້ນ
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={form.startTime}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  startTime: event.target.value,
+                                }))
+                              }
+                              className="admin-input"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-slate-700">
+                              ສິ້ນສຸດ
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={form.endTime}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  endTime: event.target.value,
+                                }))
+                              }
+                              className="admin-input"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="admin-card-muted p-4 text-sm text-[var(--admin-text-muted)]">
+                        <p className="font-semibold text-[var(--admin-text)]">
+                          ລະຫັດຫ້ອງ
+                        </p>
+                        <p className="mt-1 font-mono">{room.roomCode || "-"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-3 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={form.allowResultView}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          allowResultView: event.target.checked,
+                        }))
+                      }
+                      className="admin-checkbox"
+                    />
+                    <span className="text-sm text-slate-700">
+                      ອະນຸຍາດໃຫ້ເບິ່ງຜົນ
+                    </span>
+                  </label>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="admin-btn-primary"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      {saving ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກ"}
+                    </button>
+                  </div>
+                </form>
+              ) : activeTab === "candidates" ? (
+                <div className="space-y-5">
+                  <div>
                       {candidateStatusError ? (
-                        <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                        <div className="admin-notice-danger mt-3">
                           {candidateStatusError}
                         </div>
                       ) : null}
                       {candidateStatusMessage ? (
-                        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                        <div className="admin-notice-success mt-3">
                           {candidateStatusMessage}
                         </div>
                       ) : null}
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-sm text-slate-500">
-                        ພົບຜູ້ສະໝັກ:{" "}
-                        <span className="font-semibold text-slate-900">
+                      <div className="text-sm text-[var(--admin-text-muted)]">
+                        ຜູ້ສະໝັກ:{" "}
+                        <span className="font-semibold text-[var(--admin-text)]">
                           {candidateDrafts.length}
                         </span>
                       </div>
@@ -1124,52 +1206,52 @@ export default function AdminVoteRoomDetailPage() {
                           type="button"
                           onClick={openAddCandidateForm}
                           disabled={candidateSaving}
-                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                          className="admin-btn-primary"
                         >
                           <Plus className="h-4 w-4" />
-                          ເພີ່ມຂໍ້ມູນ
+                          ເພີ່ມຜູ້ສະໝັກ
                         </button>
                       </div>
                     </div>
 
                     {candidateDrafts.length === 0 ? (
                       <EmptyState
-                        title="ຍັງບໍ່ມີ candidate"
-                        description="ເພີ່ມ candidate ເອງ ຫຼື ດາວໂຫຼດໄຟລ໌ຕົວຢ່າງເພື່ອແກ້ໄຂ."
+                        title="ຍັງບໍ່ມີຜູ້ສະໝັກ"
+                        description="ເພີ່ມຜູ້ສະໝັກດ້ວຍມືໄດ້ຈາກໜ້ານີ້."
                       />
                     ) : (
-                      <div className="overflow-hidden rounded-2xl border border-slate-200">
-                        <table className="min-w-full divide-y divide-slate-200">
-                          <thead className="bg-slate-50">
+                      <div className="admin-table-shell overflow-x-auto">
+                        <table className="min-w-[920px] w-full table-fixed divide-y divide-[var(--admin-border)]">
+                          <thead className="admin-table-head">
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                รูป
+                              <th className="admin-table-header-cell w-20 px-4 py-3 text-left">
+                                ຮູບ
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              <th className="admin-table-header-cell w-44 px-4 py-3 text-left">
                                 ຊື່
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              <th className="admin-table-header-cell w-40 px-4 py-3 text-left">
                                 ຕຳແໜ່ງ
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              <th className="admin-table-header-cell w-36 px-4 py-3 text-left">
                                 ວັນທີ
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                bio
+                              <th className="admin-table-header-cell px-4 py-3 text-left">
+                                ຂໍ້ມູນສັ້ນ
                               </th>
-                              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              <th className="admin-table-header-cell w-32 px-4 py-3 text-right">
                                 ຈັດການ
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-200">
+                          <tbody className="divide-y divide-[var(--admin-border)]">
                             {candidateDrafts.map((candidate, index) => (
-                              <tr key={candidate.id} className="align-top">
+                              <tr key={candidate.id} className="admin-table-row align-top">
                                 <td className="px-4 py-3">
                                   <button
                                     type="button"
                                     onClick={() => setPreviewCandidate(candidate)}
-                                    className="block overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                                    className="block overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-accent)]/30"
                                     aria-label={`ເບິ່ງຮູບຂອງ ${candidate.name}`}
                                   >
                                     <img
@@ -1181,26 +1263,35 @@ export default function AdminVoteRoomDetailPage() {
                                   </button>
                                 </td>
                                 <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                                  {candidate.name}
+                                  <p className="truncate">{candidate.name}</p>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-slate-600">
-                                  {candidate.title || "-"}
+                                  <p className="truncate">{candidate.title || "-"}</p>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-slate-600">
-                                  {candidate.date || "-"}
+                                  <p className="truncate">{candidate.date || "-"}</p>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-slate-600">
-                                  {candidate.bio?.length
-                                    ? candidate.bio.join(" · ")
-                                    : "-"}
+                                  <div
+                                    className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
+                                    title={
+                                      candidate.bio?.length
+                                        ? candidate.bio.join(" · ")
+                                        : "-"
+                                    }
+                                  >
+                                    {candidate.bio?.length
+                                      ? candidate.bio.join(" · ")
+                                      : "-"}
+                                  </div>
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="bg-white px-4 py-3">
                                   <div className="flex justify-end gap-2">
                                     <button
                                       type="button"
                                       onClick={() => openEditCandidateForm(index)}
                                       disabled={candidateSaving}
-                                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 transition-colors hover:bg-slate-50"
+                                      className="admin-icon-btn"
                                       title="ແກ້ໄຂ"
                                     >
                                       <PencilLine className="h-4 w-4" />
@@ -1209,7 +1300,7 @@ export default function AdminVoteRoomDetailPage() {
                                       type="button"
                                       onClick={() => void handleDeleteCandidateDraft(index)}
                                       disabled={candidateSaving}
-                                      className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white p-2 text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                      className="admin-icon-btn-danger"
                                       title="ລົບ"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -1233,7 +1324,7 @@ export default function AdminVoteRoomDetailPage() {
                     </div>
 
                     {participation ? (
-                      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm sm:grid-cols-3">
+                      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3">
                         <div>
                           <p className="text-xs text-slate-500">ມີສິດທິທັງໝົດ</p>
                           <p className="text-lg font-bold text-slate-900">
@@ -1265,7 +1356,7 @@ export default function AdminVoteRoomDetailPage() {
                           <button
                             type="button"
                             onClick={() => void fetchResults()}
-                            className="inline-flex rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+                            className="admin-btn-primary"
                           >
                             ລອງອີກຄັ້ງ
                           </button>
@@ -1286,7 +1377,7 @@ export default function AdminVoteRoomDetailPage() {
                                   ອັນດັບ
                                 </th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  candidate
+                                  ຜູ້ສະໝັກ
                                 </th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                                   ຄະແນນ
@@ -1319,7 +1410,7 @@ export default function AdminVoteRoomDetailPage() {
                                         </p>
                                       </div>
                                     </td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-indigo-600">
+                                    <td className="px-4 py-3 text-sm font-semibold text-[var(--admin-accent)]">
                                       {row.voteCount}
                                     </td>
                                     <td className="px-4 py-3 text-sm text-slate-600">
@@ -1350,7 +1441,7 @@ export default function AdminVoteRoomDetailPage() {
                                       ຊື່
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                      Student ID
+                                      ລະຫັດນັກສຶກສາ
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                                       ສະຖານະ
@@ -1406,13 +1497,12 @@ export default function AdminVoteRoomDetailPage() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
+          </div>
 
-      <ModalShell
+        <ModalShell
         open={candidateFormOpen}
         onClose={closeCandidateForm}
-        title={candidateEditingIndex === null ? "ເພີ່ມ candidate" : "ແກ້ໄຂ candidate"}
+        title={candidateEditingIndex === null ? "ເພີ່ມຜູ້ສະໝັກ" : "ແກ້ໄຂຜູ້ສະໝັກ"}
         description="ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ ແລ້ວຄ່ອຍກົດບັນທຶກ"
         maxWidthClass="max-w-lg"
         footer={
@@ -1428,7 +1518,7 @@ export default function AdminVoteRoomDetailPage() {
               type="button"
               onClick={handleSaveCandidateDraft}
               disabled={candidateSaving}
-              className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="admin-btn-primary flex-1"
             >
               {candidateSaving
                 ? "ກຳລັງບັນທຶກ..."
@@ -1453,7 +1543,7 @@ export default function AdminVoteRoomDetailPage() {
                   name: event.target.value,
                 }))
               }
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+              className="admin-input"
               placeholder="ຜູ້ສະໝັກ 1"
             />
           </div>
@@ -1471,7 +1561,7 @@ export default function AdminVoteRoomDetailPage() {
                   title: event.target.value,
                 }))
               }
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+              className="admin-input"
               placeholder="ຕຳແໜ່ງຕົວຢ່າງ"
             />
           </div>
@@ -1490,14 +1580,14 @@ export default function AdminVoteRoomDetailPage() {
                     date: event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+                className="admin-input"
                 placeholder="2026-03-31"
               />
             </div>
 
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                Avatar URL
+                ລິ້ງຮູບ
               </label>
               <input
                 type="url"
@@ -1508,15 +1598,15 @@ export default function AdminVoteRoomDetailPage() {
                     avatar: event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                placeholder="https://... หรือ Google Drive link"
+                className="admin-input"
+                placeholder="https://... ຫຼື ລິ້ງ Google Drive"
               />
             </div>
           </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              BIO
+              ຂໍ້ມູນສັ້ນ
             </label>
             <textarea
               value={candidateForm.bioText}
@@ -1527,11 +1617,11 @@ export default function AdminVoteRoomDetailPage() {
                 }))
               }
               rows={5}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-              placeholder="จุดเด่น 1; จุดเด่น 2"
+              className="admin-textarea"
+              placeholder="ຈຸດເດັ່ນ 1; ຈຸດເດັ່ນ 2"
             />
             <p className="mt-1 text-xs text-slate-500">
-              แยกแต่ละข้อด้วยเครื่องหมาย `;` หรือขึ้นบรรทัดใหม่
+              ແຍກແຕ່ລະຂໍ້ດ້ວຍ `;` ຫຼື ຂຶ້ນແຖວໃໝ່
             </p>
           </div>
 
@@ -1541,18 +1631,18 @@ export default function AdminVoteRoomDetailPage() {
         </div>
       </ModalShell>
 
-      <ImagePreviewModal
+        <ImagePreviewModal
         open={!!previewCandidate}
         imageUrl={toDisplayAvatarUrl(
           previewCandidate?.avatar,
-          previewCandidate?.name || "candidate",
+          previewCandidate?.name || "ຜູ້ສະໝັກ",
         )}
-        title={previewCandidate?.name || "candidate"}
+        title={previewCandidate?.name || "ຜູ້ສະໝັກ"}
         subtitle={previewCandidate?.title}
         onClose={() => setPreviewCandidate(null)}
       />
 
-      <ModalShell
+        <ModalShell
         open={qrModalOpen}
         onClose={() => setQrModalOpen(false)}
         title="QR ຫ້ອງ"
@@ -1584,7 +1674,7 @@ export default function AdminVoteRoomDetailPage() {
                 href={roomJoinUrl || `/vote-room/${room.roomCode}`}
                 target="_blank"
                 rel="noreferrer"
-                className="font-mono text-indigo-600 underline decoration-indigo-300 underline-offset-2 transition-colors hover:text-indigo-700"
+                className="font-mono text-[var(--admin-accent)] underline decoration-[var(--admin-accent)]/40 underline-offset-2 transition-colors hover:text-[var(--admin-accent-hover)]"
               >
                 {roomJoinUrl || `/vote-room/${room.roomCode}`}
               </a>
@@ -1594,13 +1684,14 @@ export default function AdminVoteRoomDetailPage() {
           <button
             type="button"
             onClick={handleDownloadRoomQr}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+            className="admin-btn-primary w-full"
           >
             <Download className="h-4 w-4" />
             ດາວໂຫຼດ QR
           </button>
         </div>
-      </ModalShell>
+        </ModalShell>
+      </div>
     </AdminRoute>
   );
 }

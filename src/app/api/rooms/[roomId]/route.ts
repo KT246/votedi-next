@@ -1,37 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 
 import { getAuthContext } from "@/lib/serverAuth";
+import { autoCloseExpiredRoom } from "@/lib/roomLifecycle";
 import {
-  autoCloseExpiredRoom,
-  getRoomDeadline,
-  getVoteRoomKeys,
-} from "@/lib/roomLifecycle";
+  deleteRoomResultsByRoomId,
+  deleteRoom,
+  deleteVotesByRoomId,
+  syncRoomResultsForRoom,
+  getRoomByKey,
+  type RoomRecord,
+  updateRoom,
+} from "@/lib/firestoreData";
 import {
   emitRoomLifecycleChanged,
   emitRoomResultsReset,
 } from "@/lib/realtimeEmitter";
 import type { Candidate, VoteRoom } from "@/types";
-
-type RoomDocument = Omit<
-  VoteRoom,
-  | "id"
-  | "startTime"
-  | "endTime"
-  | "candidates"
-  | "allowedUsers"
-  | "createdAt"
-  | "updatedAt"
-> & {
-  _id?: ObjectId;
-  startTime: Date | null;
-  endTime: Date | null;
-  ownerAdminId: string;
-  candidates: Candidate[];
-  allowedUsers: string[];
-  createdAt: Date;
-  updatedAt: Date;
-};
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value || "").trim();
@@ -90,9 +74,19 @@ function normalizeCandidates(value: unknown): Candidate[] {
   });
 }
 
-function serializeRoom(room: RoomDocument) {
+function validateOpenRoomCandidates(params: {
+  status: VoteRoom["status"];
+  maxSelection: number;
+  candidates: Candidate[];
+}) {
+  if (params.status !== "open") return null;
+  if (params.candidates.length > params.maxSelection) return null;
+  return "ຈຳນວນຜູ້ສະໝັກຕ້ອງຫຼາຍກວ່າຈຳນວນສູງສຸດທີ່ເລືອກໄດ້ກ່ອນເປີດຫ້ອງ";
+}
+
+function serializeRoom(room: RoomRecord) {
   return {
-    id: room._id?.toString() || "",
+    id: room.id,
     roomCode: room.roomCode,
     roomName: room.roomName,
     description: room.description,
@@ -112,29 +106,6 @@ function serializeRoom(room: RoomDocument) {
   };
 }
 
-async function findRoomByKey(
-  db: {
-    collection: (name: string) => {
-      findOne: (query: Record<string, unknown>) => Promise<RoomDocument | null>;
-    };
-  },
-  roomKey: string,
-) {
-  const directByStringId = await db
-    .collection("rooms")
-    .findOne({ _id: roomKey });
-  if (directByStringId) return directByStringId;
-
-  if (ObjectId.isValid(roomKey) && String(new ObjectId(roomKey)) === roomKey) {
-    const byId = await db
-      .collection("rooms")
-      .findOne({ _id: new ObjectId(roomKey) });
-    if (byId) return byId;
-  }
-
-  return db.collection("rooms").findOne({ roomCode: roomKey });
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> },
@@ -145,12 +116,12 @@ export async function GET(
   }
 
   const { roomId } = await params;
-  const room = await findRoomByKey(auth.db, roomId);
+  const room = await getRoomByKey(roomId);
   if (!room) {
     return NextResponse.json({ message: "Room not found" }, { status: 404 });
   }
 
-  const activeRoom = await autoCloseExpiredRoom<RoomDocument>(auth.db, room);
+  const activeRoom = await autoCloseExpiredRoom(room);
   return NextResponse.json(serializeRoom(activeRoom));
 }
 
@@ -167,12 +138,17 @@ export async function PATCH(
   const body = await request.json();
   const requestedStatus =
     body?.status !== undefined ? normalizeStatus(body.status) : undefined;
-  const update: Record<string, unknown> = {
+  const update: Record<string, unknown> & {
+    startTime?: Date | null;
+    endTime?: Date | null;
+    timeMode?: "duration" | "range";
+    durationMinutes?: number | undefined;
+    status?: VoteRoom["status"];
+  } = {
     updatedAt: new Date(),
   };
 
-  if (body?.roomName !== undefined)
-    update.roomName = normalizeString(body.roomName);
+  if (body?.roomName !== undefined) update.roomName = normalizeString(body.roomName);
   if (body?.description !== undefined)
     update.description = normalizeString(body.description);
   if (body?.startTime !== undefined)
@@ -203,19 +179,41 @@ export async function PATCH(
       : [];
   }
 
-  const currentRoom = await findRoomByKey(auth.db, roomId);
+  const currentRoom = await getRoomByKey(roomId);
   if (!currentRoom) {
     return NextResponse.json({ message: "Room not found" }, { status: 404 });
+  }
+
+  if (body?.candidates !== undefined && currentRoom.status === "open") {
+    return NextResponse.json(
+      { message: "ບໍ່ສາມາດແກ້ໄຂຜູ້ສະໝັກໄດ້ໃນຂະນະທີ່ຫ້ອງເປີດຢູ່" },
+      { status: 409 },
+    );
+  }
+
+  const nextStatus = requestedStatus ?? currentRoom.status;
+  const nextMaxSelection =
+    typeof update.maxSelection === "number"
+      ? update.maxSelection
+      : currentRoom.maxSelection;
+  const nextCandidates = Array.isArray(update.candidates)
+    ? (update.candidates as Candidate[])
+    : currentRoom.candidates || [];
+
+  const openValidationMessage = validateOpenRoomCandidates({
+    status: nextStatus,
+    maxSelection: nextMaxSelection,
+    candidates: nextCandidates,
+  });
+  if (openValidationMessage) {
+    return NextResponse.json({ message: openValidationMessage }, { status: 400 });
   }
 
   const isClosedToResetStatus =
     currentRoom.status === "closed" &&
     (requestedStatus === "open" || requestedStatus === "draft");
   if (isClosedToResetStatus) {
-    const voteKeys = getVoteRoomKeys(currentRoom, roomId);
-    await auth.db.collection("votes").deleteMany({
-      $or: [{ roomId: { $in: voteKeys } }, { roomCode: { $in: voteKeys } }],
-    });
+    await deleteVotesByRoomId(currentRoom.id);
     if (requestedStatus === "draft") {
       update.startTime = null;
       update.endTime = null;
@@ -265,50 +263,36 @@ export async function PATCH(
       update.timeMode = "duration";
     }
   } else if (requestedStatus === "closed") {
-    const deadline = getRoomDeadline(currentRoom);
-    if (deadline && Date.now() < deadline.getTime()) {
-      update.status = "draft";
-      update.startTime = null;
-      update.endTime = null;
-    } else {
-      update.status = "closed";
-    }
+    update.status = "closed";
   } else if (requestedStatus !== undefined) {
     update.status = requestedStatus;
   }
 
-  const filter: Record<string, unknown> = currentRoom._id
-    ? { _id: currentRoom._id }
-    : { roomCode: currentRoom.roomCode };
-  const result = await auth.db
-    .collection("rooms")
-    .updateOne(filter, { $set: update });
-
-  if (!result.matchedCount) {
-    return NextResponse.json({ message: "Room not found" }, { status: 404 });
-  }
-
-  const updatedRoom = await findRoomByKey(auth.db, roomId);
+  const updatedRoom = await updateRoom(currentRoom.id, update);
   if (!updatedRoom) {
     return NextResponse.json({ message: "Room not found" }, { status: 404 });
   }
 
-  const serializedRoom = serializeRoom(updatedRoom);
-
-  await emitRoomLifecycleChanged({
-    roomId: serializedRoom.id || serializedRoom.roomCode,
-    status: serializedRoom.status,
-    ownerAdminId: serializedRoom.ownerAdminId,
+  await syncRoomResultsForRoom(updatedRoom, {
+    resetCounts: isClosedToResetStatus,
   });
 
-  if (isClosedToResetStatus) {
-    await emitRoomResultsReset({
-      roomId: serializedRoom.id || serializedRoom.roomCode,
-      ownerAdminId: serializedRoom.ownerAdminId,
+  if (currentRoom.status !== updatedRoom.status) {
+    await emitRoomLifecycleChanged({
+      roomId: updatedRoom.id,
+      status: updatedRoom.status,
+      ownerAdminId: updatedRoom.ownerAdminId,
     });
   }
 
-  return NextResponse.json(serializedRoom);
+  if (isClosedToResetStatus) {
+    await emitRoomResultsReset({
+      roomId: updatedRoom.id,
+      ownerAdminId: updatedRoom.ownerAdminId,
+    });
+  }
+
+  return NextResponse.json(serializeRoom(updatedRoom));
 }
 
 export async function DELETE(
@@ -321,20 +305,16 @@ export async function DELETE(
   }
 
   const { roomId } = await params;
-  const currentRoom = await findRoomByKey(auth.db, roomId);
+  const currentRoom = await getRoomByKey(roomId);
   if (!currentRoom) {
     return NextResponse.json({ message: "Room not found" }, { status: 404 });
   }
 
-  const result = await auth.db
-    .collection("rooms")
-    .deleteOne({ _id: currentRoom._id });
-  if (!result.deletedCount) {
-    return NextResponse.json({ message: "Room not found" }, { status: 404 });
-  }
-
+  await deleteVotesByRoomId(currentRoom.id);
+  await deleteRoom(currentRoom.id);
+  await deleteRoomResultsByRoomId(currentRoom.id);
   await emitRoomLifecycleChanged({
-    roomId: currentRoom._id?.toString() || currentRoom.roomCode || roomId,
+    roomId: currentRoom.id,
     status: "deleted",
     ownerAdminId: currentRoom.ownerAdminId,
   });

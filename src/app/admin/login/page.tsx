@@ -1,7 +1,9 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
+
 import { useAdminAuthStore } from "../../../store/adminAuthStore";
 import apiClient from "../../../lib/apiClient";
 
@@ -19,7 +21,7 @@ export default function AdminLoginPage() {
     e.preventDefault();
 
     if (!username.trim() || !password.trim()) {
-      setError("ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບຖ້ວນ");
+      setError("ກະລຸນາປ້ອນຊື່ຜູ້ໃຊ້ ແລະ ລະຫັດຜ່ານ");
       return;
     }
 
@@ -35,7 +37,7 @@ export default function AdminLoginPage() {
       const { accessToken, access_token, user } = res.data || {};
       const token = accessToken || access_token;
       if (!user || !token) {
-        throw new Error("Invalid login response");
+        throw new Error("ຂໍ້ມູນຕອບກັບບໍ່ຖືກຕ້ອງ");
       }
 
       const admin = {
@@ -43,8 +45,6 @@ export default function AdminLoginPage() {
         username: user.username,
         fullName: user.fullName,
         role: user.role,
-        permissions: user.permissions,
-        createdByAdminId: user.createdByAdminId,
       };
 
       loginAdmin(admin, token);
@@ -58,9 +58,7 @@ export default function AdminLoginPage() {
       setError(
         Array.isArray(message)
           ? message.join(", ")
-          : message ||
-              typedErr?.message ||
-              "ຂໍ້ມູນບໍ່ຖືກຕ້ອງ ຫຼື ເຂົ້າລະບົບບໍ່ສຳເລັດ",
+          : message || typedErr?.message || "ເຂົ້າລະບົບບໍ່ສຳເລັດ",
       );
     } finally {
       setLoading(false);
@@ -68,102 +66,144 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-12">
-      <div className="mx-auto w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50">
-            <svg
-              className="h-7 w-7 text-indigo-600"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-              />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-extrabold text-slate-900">
-            ລະບົບຄຸ້ມຄອງ
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">ເຂົ້າລະບົບສຳລັບຜູ້ດູແລ</p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              ຊື່ຜູ້ໃຊ້
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(event) => {
-                setUsername(event.target.value);
-                setError("");
-              }}
-              placeholder="admin"
-              autoCapitalize="none"
-              autoCorrect="off"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-            />
-          </div>
-
-          <div className="mt-3">
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              ລະຫັດຜ່ານ
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  setError("");
-                }}
-                placeholder="admin123"
-                autoCapitalize="none"
-                autoCorrect="off"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-              >
-                {showPassword ? "ເຊົ່າລະຫັດ" : "ເບິ່ງລະຫັດ"}
-              </button>
+    <div className="min-h-screen bg-[var(--admin-bg)] px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="hidden lg:block">
+          <div className="admin-card overflow-hidden">
+            <div className="border-b border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-8 py-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]">
+                  <ShieldCheck className="h-7 w-7" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--admin-text-muted)]">
+                    VoteDI
+                  </p>
+                  <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--admin-text)]">
+                    ສູນຈັດການແອັດມິນ
+                  </h1>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6 px-8 py-8">
+              <p className="max-w-xl text-base leading-7 text-[var(--admin-text-muted)]">
+                ໜ້າຈັດການທີ່ເປັນລະບຽບ ສຳລັບຂໍ້ມູນຜູ້ໂຫວດ, ການຕັ້ງຄ່າຫ້ອງ
+                ແລະ ການຕິດຕາມຜົນແບບ realtime
+              </p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="admin-card-muted px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--admin-text-muted)]">
+                    ຜູ້ໂຫວດ
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--admin-text)]">
+                    ຈັດການ `fullName + studentId`
+                  </p>
+                </div>
+                <div className="admin-card-muted px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--admin-text-muted)]">
+                    ຫ້ອງ
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--admin-text)]">
+                    ຮ່າງ, ເປີດ, ປິດ ແລະ ກວດສອບ
+                  </p>
+                </div>
+                <div className="admin-card-muted px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--admin-text-muted)]">
+                    Realtime
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--admin-text)]">
+                    ອັບເດດຜ່ານ Firestore snapshot
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
+        </section>
 
-          {error ? (
-            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
-              <p className="flex items-center gap-2 text-xs text-rose-700">
-                {error}
+        <section className="mx-auto w-full max-w-md">
+          <div className="admin-card p-7 sm:p-8">
+            <div className="mb-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]">
+                <LockKeyhole className="h-5 w-5" />
+              </div>
+              <h2 className="mt-5 text-2xl font-bold tracking-tight text-[var(--admin-text)]">
+                ເຂົ້າລະບົບແອັດມິນ
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--admin-text-muted)]">
+                ໃຊ້ບັນຊີແອັດມິນຂອງລະບົບ. ແອັບນີ້ບໍ່ໄດ້ໃຊ້ Firebase Auth
               </p>
             </div>
-          ) : null}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {loading ? (
-              <>
-                <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                ກຳລັງເຂົ້າລະບົບ...
-              </>
-            ) : (
-              "ເຂົ້າລະບົບ"
-            )}
-          </button>
-        </form>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  ຊື່ຜູ້ໃຊ້
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(event) => {
+                    setUsername(event.target.value);
+                    setError("");
+                  }}
+                  placeholder="admin"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  className="admin-input"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                  ລະຫັດຜ່ານ
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setError("");
+                    }}
+                    placeholder="admin123"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    className="admin-input pr-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)] transition-colors hover:text-[var(--admin-text)]"
+                    aria-label={showPassword ? "ເຊື່ອງລະຫັດຜ່ານ" : "ສະແດງລະຫັດຜ່ານ"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {error ? <div className="admin-notice-danger">{error}</div> : null}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="admin-btn-primary w-full py-3"
+              >
+                {loading ? (
+                  <>
+                    <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    ກຳລັງເຂົ້າລະບົບ...
+                  </>
+                ) : (
+                  "ເຂົ້າລະບົບ"
+                )}
+              </button>
+            </form>
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -1,35 +1,38 @@
 "use client";
 
-import Pusher, { type Channel } from "pusher-js";
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  startAt,
+  Timestamp,
+} from "firebase/firestore";
 
+import { getClientDb } from "@/lib/firebaseClient";
 import { toRealtimeChannelName } from "@/lib/realtimeChannels";
 
-const PUSHER_KEY = process.env.NEXT_PUBLIC_PUSHER_KEY?.trim() || "";
-const PUSHER_CLUSTER = process.env.NEXT_PUBLIC_PUSHER_CLUSTER?.trim() || "";
 const SUPPORTED_EVENTS = [
   "room:status-changed",
   "rooms:status-changed",
-  "vote:new",
   "room:progress-updated",
   "room:results-reset",
 ] as const;
 
 type SupportedEvent = (typeof SUPPORTED_EVENTS)[number];
-type EventHandler = (payload: any) => void;
+type EventHandler = { bivarianceHack(payload: unknown): void }["bivarianceHack"];
 type RealtimeClient = {
   on: (eventName: SupportedEvent, handler: EventHandler) => void;
   off: (eventName: SupportedEvent, handler: EventHandler) => void;
 };
 
-let pusherClient: Pusher | null = null;
 let activeConsumers = 0;
 const eventListeners = new Map<SupportedEvent, Set<EventHandler>>();
 const subscribedChannels = new Map<
   string,
   {
-    channel: Channel;
     refCount: number;
-    forwards: Map<SupportedEvent, EventHandler>;
+    unsubscribe: () => void;
   }
 >();
 
@@ -55,18 +58,8 @@ function getOrCreateListeners(eventName: SupportedEvent): Set<EventHandler> {
   return next;
 }
 
-function getPusherClient(): Pusher | null {
-  if (!PUSHER_KEY || !PUSHER_CLUSTER) return null;
-
-  if (!pusherClient) {
-    Pusher.logToConsole = false;
-    pusherClient = new Pusher(PUSHER_KEY, {
-      cluster: PUSHER_CLUSTER,
-      forceTLS: true,
-    });
-  }
-
-  return pusherClient;
+function getRealtimeDb() {
+  return getClientDb();
 }
 
 const realtimeClient: RealtimeClient = {
@@ -79,7 +72,7 @@ const realtimeClient: RealtimeClient = {
 };
 
 export const getSocket = (): RealtimeClient | null => {
-  return getPusherClient() ? realtimeClient : null;
+  return getRealtimeDb() ? realtimeClient : null;
 };
 
 export const acquireSocket = (): RealtimeClient | null => {
@@ -93,17 +86,12 @@ export const releaseSocket = (): void => {
   activeConsumers = Math.max(0, activeConsumers - 1);
   if (activeConsumers > 0) return;
 
-  for (const [channelName, entry] of subscribedChannels.entries()) {
-    for (const [eventName, forward] of entry.forwards.entries()) {
-      entry.channel.unbind(eventName, forward);
-    }
-    pusherClient?.unsubscribe(channelName);
+  for (const [, entry] of subscribedChannels.entries()) {
+    entry.unsubscribe();
   }
 
   subscribedChannels.clear();
   eventListeners.clear();
-  pusherClient?.disconnect();
-  pusherClient = null;
 };
 
 export const joinSocketRoom = (scope: string): void => {
@@ -116,22 +104,37 @@ export const joinSocketRoom = (scope: string): void => {
     return;
   }
 
-  const pusher = getPusherClient();
-  if (!pusher) return;
+  const realtimeDb = getRealtimeDb();
+  if (!realtimeDb) return;
 
-  const channel = pusher.subscribe(channelName);
-  const forwards = new Map<SupportedEvent, EventHandler>();
+  const connectedAt = Timestamp.fromDate(new Date());
+  const eventsRef = collection(
+    realtimeDb,
+    "realtime_channels",
+    channelName,
+    "events",
+  );
+  const eventsQuery = query(eventsRef, orderBy("createdAt", "asc"), startAt(connectedAt));
+  const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      if (change.type !== "added") return;
 
-  for (const eventName of SUPPORTED_EVENTS) {
-    const forward: EventHandler = (payload) => dispatchEvent(eventName, payload);
-    channel.bind(eventName, forward);
-    forwards.set(eventName, forward);
-  }
+      const data = change.doc.data() as {
+        event?: SupportedEvent;
+        payload?: unknown;
+      };
+
+      if (!data.event || !SUPPORTED_EVENTS.includes(data.event)) {
+        return;
+      }
+
+      dispatchEvent(data.event, data.payload);
+    });
+  });
 
   subscribedChannels.set(channelName, {
-    channel,
     refCount: 1,
-    forwards,
+    unsubscribe,
   });
 };
 
@@ -147,10 +150,6 @@ export const leaveSocketRoom = (scope: string): void => {
     return;
   }
 
-  for (const [eventName, forward] of existing.forwards.entries()) {
-    existing.channel.unbind(eventName, forward);
-  }
-
-  pusherClient?.unsubscribe(channelName);
+  existing.unsubscribe();
   subscribedChannels.delete(channelName);
 };

@@ -49,7 +49,7 @@ export default function ForceChangePasswordModal({ required = true, onClose }: F
                 newPassword,
             });
             const { user: updatedUser, accessToken } = res.data || {};
-            if (!updatedUser || !accessToken) throw new Error('Invalid change password response');
+            if (!updatedUser || !accessToken) throw new Error('ຂໍ້ມູນຕອບກັບບໍ່ຖືກຕ້ອງ');
 
             login(updatedUser, accessToken);
             setCurrentPassword('');

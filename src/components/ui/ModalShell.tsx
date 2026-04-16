@@ -50,14 +50,14 @@ export default function ModalShell({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-slate-900/50"
+        className="absolute inset-0 bg-[#122419]/45 backdrop-blur-[2px]"
         onClick={closeOnBackdrop ? onClose : undefined}
       />
       <div
-        className={`relative w-full ${maxWidthClass} overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl`}
+        className={`relative w-full ${maxWidthClass} overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-white shadow-[0_28px_80px_-40px_rgba(18,36,25,0.45)]`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-5 py-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-900">
               {title}
@@ -72,15 +72,19 @@ export default function ModalShell({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
-              aria-label={closeAriaLabel || "ປິດໜ້າຕ່າງ"}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--admin-border)] text-slate-500 transition-colors hover:bg-white hover:text-slate-700"
+              aria-label={closeAriaLabel || "Close dialog"}
             >
               <X className="h-4 w-4" />
             </button>
           ) : null}
         </div>
         <div className="px-5 py-5">{children}</div>
-        {footer ? <div className="border-t border-slate-100 px-5 py-4">{footer}</div> : null}
+        {footer ? (
+          <div className="border-t border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-5 py-4">
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );

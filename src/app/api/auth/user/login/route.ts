@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 
-import { connectToDatabase } from "@/lib/mongodb";
+import {
+  claimUserDevice,
+  getUserByStudentId,
+} from "@/lib/firestoreData";
 import {
   normalizeText,
   serializeUser,
   signUserToken,
-  type UserDocument,
 } from "@/lib/userAuth";
 import { readDeviceId } from "@/lib/serverAuth";
 
@@ -82,10 +83,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { db } = await connectToDatabase();
-    const users = db.collection<UserDocument>("users");
-    const user = await users.findOne({ studentId: normalizedStudentId });
-
+    const user = await getUserByStudentId(normalizedStudentId);
     if (!user) {
       return NextResponse.json(
         { message: "Student ID is not valid" },
@@ -111,49 +109,34 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          message: "Account is active on another device. Please logout there first.",
+          message:
+            "Account is active on another device. Please logout there first.",
         },
         { status: 409 },
       );
     }
 
-    const userId = user._id ? new ObjectId(user._id) : null;
-    if (!userId) {
-      return NextResponse.json({ message: "User not found" }, { status: 404 });
-    }
-
-    const bindResult = await users.updateOne(
-      {
-        _id: userId,
-        $or: [
-          { activeDeviceId: { $exists: false } },
-          { activeDeviceId: "" },
-          { activeDeviceId: deviceId },
-        ],
-      },
-      {
-        $set: {
-          activeDeviceId: deviceId,
-          activeDeviceBoundAt: new Date(),
-          updatedAt: new Date(),
-        },
-      },
-    );
-
-    if (bindResult.matchedCount === 0) {
+    const claimed = await claimUserDevice(user.id || "", deviceId);
+    if (!claimed) {
       return NextResponse.json(
         {
-          message: "Account is active on another device. Please logout there first.",
+          message:
+            "Account is active on another device. Please logout there first.",
         },
         { status: 409 },
       );
+    }
+
+    const refreshedUser = await getUserByStudentId(normalizedStudentId);
+    if (!refreshedUser) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
     deviceConflictTracker.delete(normalizedStudentId.toLowerCase());
 
     return NextResponse.json({
-      accessToken: signUserToken(user),
-      user: serializeUser(user),
+      accessToken: signUserToken(refreshedUser),
+      user: serializeUser(refreshedUser),
     });
   } catch (error) {
     console.error("User login error:", error);

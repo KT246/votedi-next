@@ -7,32 +7,12 @@ export interface User {
     createdByAdminId?: string;
 }
 
-export interface OfficerPermissions {
-    canChangeStatus: boolean;      // open/close/pending/draft
-    canManageCandidates: boolean;  // add/edit/delete candidates
-    canManageUsers: boolean;       // import / manage voters
-    canViewResults: boolean;       // see Results tab
-    canExportCsv: boolean;         // download CSV
-    canCreateRooms: boolean;       // create new rooms
-}
-
-export const DEFAULT_OFFICER_PERMISSIONS: OfficerPermissions = {
-    canChangeStatus: false,
-    canManageCandidates: false,
-    canManageUsers: false,
-    canViewResults: true,
-    canExportCsv: true,
-    canCreateRooms: false,
-};
-
 export interface AdminUser {
     id: string;
     username: string;
     fullName: string;
     role: string;              // single admin account
     password?: string;
-    createdByAdminId?: string;
-    permissions?: OfficerPermissions;
 }
 
 export interface Candidate {

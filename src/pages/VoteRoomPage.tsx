@@ -163,18 +163,6 @@ export default function VoteRoomPage() {
         return;
       void loadRoom(roomCode);
     },
-    onVoteNew: (data) => {
-      if (!roomCode || normalizeId(data.roomId) !== normalizeId(roomInfo?.id)) {
-        return;
-      }
-      void loadRoom(roomCode, { silent: true });
-    },
-    onRoomProgressUpdated: (data) => {
-      if (!roomCode || normalizeId(data.roomId) !== normalizeId(roomInfo?.id)) {
-        return;
-      }
-      void loadRoom(roomCode, { silent: true });
-    },
   });
 
   useEffect(() => {
@@ -286,6 +274,12 @@ export default function VoteRoomPage() {
       await submitVoteRequest();
     } catch (err: unknown) {
       const message = toApiErrorMessage(err);
+      const statusCode = Number(
+        (err as { response?: { status?: number } })?.response?.status || 0,
+      );
+      if ((statusCode === 403 || statusCode === 409) && roomCode) {
+        void loadRoom(roomCode, { silent: true });
+      }
       setSubmitError(message);
       showAlertDialog(message, "ສົ່ງຄະແນນບໍ່ສຳເລັດ");
       setSubmitting(false);

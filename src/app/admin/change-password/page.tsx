@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, KeyRound } from "lucide-react";
+
 import { useAdminAuthStore } from "../../../store/adminAuthStore";
-import { useAdminRole } from "../../../hooks/useAdminRole";
 import apiClient from "../../../api/apiClient";
 import { showAlertDialog } from "../../../store/dialogStore";
+import PageHeader from "../../../components/ui/PageHeader";
 
 export default function AdminChangePasswordPage() {
-  const { adminId } = useAdminRole();
   const adminUser = useAdminAuthStore((state) => state.adminUser);
+  const adminId = adminUser?.id || "";
   const router = useRouter();
 
   const [form, setForm] = useState({ current: "", next: "" });
@@ -23,17 +24,17 @@ export default function AdminChangePasswordPage() {
     event.preventDefault();
 
     if (!adminId || !adminUser?.username) {
-      showAlertDialog("ບໍ່ພົບຂໍ້ມູນຜູ້ດູແລ", "ກະລຸນາເຂົ້າລະບົບອີກຄັ້ງ");
+      showAlertDialog("ຂໍ້ມູນແອັດມິນບໍ່ຄົບ", "ກະລຸນາເຂົ້າລະບົບໃໝ່");
       return;
     }
 
     if (!form.current.trim() || !form.next.trim()) {
-      setError("ກະລຸນາກອກລະຫັດຜ່ານທັງສອງຊ່ອງ");
+      setError("ກະລຸນາປ້ອນລະຫັດຜ່ານເກົ່າ ແລະ ລະຫັດຜ່ານໃໝ່");
       return;
     }
 
     if (form.next.trim().length < 6) {
-      setError("ລະຫັດຜ່ານໃໝ່ຕ້ອງມີຢ່າງນ້ອຍ 6 ຕົວອັກສອນ");
+      setError("ລະຫັດຜ່ານໃໝ່ຕ້ອງຍາວຢ່າງນ້ອຍ 6 ຕົວອັກສອນ");
       return;
     }
 
@@ -45,13 +46,11 @@ export default function AdminChangePasswordPage() {
         password: form.current,
       });
 
-      const authenticatedAdminId =
-        (loginRes.data?.user?.id as string) || adminId;
-      if (!authenticatedAdminId) {
-        throw new Error("Admin ID is missing");
+      if (!((loginRes.data?.user?.id as string) || adminId)) {
+        throw new Error("ບໍ່ພົບ admin ID");
       }
 
-      await apiClient.patch(`/admins/${authenticatedAdminId}`, {
+      await apiClient.patch("/admin/profile", {
         password: form.next,
       });
 
@@ -59,8 +58,8 @@ export default function AdminChangePasswordPage() {
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { message?: string } } }).response
-              ?.data?.message
+          ? (err as { response?: { data?: { message?: string } } }).response?.data
+              ?.message
           : undefined;
       setError(message || "ບໍ່ສາມາດປ່ຽນລະຫັດຜ່ານໄດ້");
     } finally {
@@ -69,100 +68,122 @@ export default function AdminChangePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8">
-      <div className="mx-auto max-w-lg">
-        <div className="mb-6">
-          <p className="text-sm font-medium text-slate-500">
-            ບັນຊີ:{" "}
-            <span className="font-mono text-slate-700">
-              {adminUser?.username || "-"}
-            </span>
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900">
-            ປ່ຽນລະຫັດຜ່ານ
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            ປ່ຽນລະຫັດຜ່ານຂອງບັນຊີ admin ທີ່ກຳລັງໃຊ້ຢູ່
-          </p>
+    <div className="admin-page">
+      <div className="admin-page-container max-w-3xl">
+        <PageHeader
+          title="ປ່ຽນລະຫັດຜ່ານ"
+          subtitle={
+            <>
+              ບັນຊີ:{" "}
+              <span className="font-mono text-[var(--admin-text)]">
+                {adminUser?.username || "-"}
+              </span>
+            </>
+          }
+        />
+
+        <div className="admin-card overflow-hidden">
+          <div className="border-b border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-6 py-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[var(--admin-text)]">
+                  ອັບເດດຂໍ້ມູນບັນຊີແອັດມິນ
+                </p>
+                <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
+                  ການປ່ຽນລະຫັດຜ່ານຈັດການຜ່ານ API ຂອງແອັບ ບໍ່ໄດ້ໃຊ້ Firebase Auth
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5 px-6 py-6">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                ລະຫັດຜ່ານປັດຈຸບັນ
+              </label>
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={form.current}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, current: event.target.value }))
+                  }
+                  className="admin-input pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)] transition-colors hover:text-[var(--admin-text)]"
+                  aria-label={
+                    showCurrentPassword
+                      ? "ເຊື່ອງລະຫັດຜ່ານປັດຈຸບັນ"
+                      : "ສະແດງລະຫັດຜ່ານປັດຈຸບັນ"
+                  }
+                >
+                  {showCurrentPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                ລະຫັດຜ່ານໃໝ່
+              </label>
+              <div className="relative">
+                <input
+                  type={showNextPassword ? "text" : "password"}
+                  value={form.next}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, next: event.target.value }))
+                  }
+                  className="admin-input pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNextPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)] transition-colors hover:text-[var(--admin-text)]"
+                  aria-label={
+                    showNextPassword
+                      ? "ເຊື່ອງລະຫັດຜ່ານໃໝ່"
+                      : "ສະແດງລະຫັດຜ່ານໃໝ່"
+                  }
+                >
+                  {showNextPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {error ? <div className="admin-notice-danger">{error}</div> : null}
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="admin-btn-secondary flex-1"
+              >
+                ຍົກເລີກ
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="admin-btn-primary flex-1"
+              >
+                {saving ? "ກຳລັງບັນທຶກ..." : "ອັບເດດລະຫັດຜ່ານ"}
+              </button>
+            </div>
+          </form>
         </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              ລະຫັດຜ່ານປັດຈຸບັນ
-            </label>
-            <div className="relative">
-              <input
-                type={showCurrentPassword ? "text" : "password"}
-                value={form.current}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, current: event.target.value }))
-                }
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-600 hover:text-indigo-800"
-                aria-label={
-                  showCurrentPassword
-                    ? "Hide current password"
-                    : "Show current password"
-                }
-              >
-                {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              ລະຫັດຜ່ານໃໝ່
-            </label>
-            <div className="relative">
-              <input
-                type={showNextPassword ? "text" : "password"}
-                value={form.next}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, next: event.target.value }))
-                }
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNextPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-600 hover:text-indigo-800"
-                aria-label={
-                  showNextPassword ? "Hide new password" : "Show new password"
-                }
-              >
-                {showNextPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              ຍົກເລີກ
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-70"
-            >
-              {saving ? "ກຳລັງບັນທຶກ..." : "ປ່ຽນລະຫັດຜ່ານ"}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

@@ -1,10 +1,9 @@
 import jwt from 'jsonwebtoken';
-import type { ObjectId } from 'mongodb';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vote-next-secret-key';
 
 export type UserDocument = {
-    _id?: ObjectId;
+    id?: string;
     fullName: string;
     studentId: string;
     avatar?: string;
@@ -24,7 +23,7 @@ export function normalizeText(value: unknown): string {
 
 export function serializeUser(user: UserDocument) {
     return {
-        id: user._id?.toString() || '',
+        id: user.id || '',
         fullName: user.fullName,
         studentId: user.studentId,
         avatar: user.avatar || '',
@@ -37,7 +36,7 @@ export function serializeUser(user: UserDocument) {
 
 export function serializeManagedUser(user: UserDocument) {
     return {
-        id: user._id?.toString() || '',
+        id: user.id || '',
         fullName: user.fullName,
         studentId: user.studentId,
         avatar: user.avatar || '',
@@ -51,7 +50,7 @@ export function serializeManagedUser(user: UserDocument) {
 export function signUserToken(user: UserDocument) {
     return jwt.sign(
         {
-            id: user._id?.toString() || '',
+            id: user.id || '',
             studentId: user.studentId,
             role: 'user',
             createdByAdminId: user.createdByAdminId || '',

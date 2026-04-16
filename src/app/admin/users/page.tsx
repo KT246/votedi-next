@@ -9,6 +9,8 @@ import EmptyState from "../../../components/ui/EmptyState";
 import ErrorState from "../../../components/ui/ErrorState";
 import LoadingState from "../../../components/ui/LoadingState";
 import ModalShell from "../../../components/ui/ModalShell";
+import PageHeader from "../../../components/ui/PageHeader";
+import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 
 interface ManagedUser {
   id: string;
@@ -75,6 +77,7 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState<UserFormState>(emptyForm);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search, 1000);
 
   const pageSize = 10;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -99,7 +102,7 @@ export default function AdminUsersPage() {
       setPageError(
         Array.isArray(message)
           ? message.join(", ")
-          : message || typedErr?.message || "Failed to load voters",
+          : message || typedErr?.message || "ບໍ່ສາມາດໂຫຼດລາຍຊື່ຜູ້ໂຫວດໄດ້",
       );
     } finally {
       setLoading(false);
@@ -112,10 +115,10 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [debouncedSearch]);
 
   const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
     if (!query) return users;
 
     return users.filter(
@@ -123,7 +126,7 @@ export default function AdminUsersPage() {
         user.fullName.toLowerCase().includes(query) ||
         user.studentId.toLowerCase().includes(query),
     );
-  }, [search, users]);
+  }, [debouncedSearch, users]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -169,27 +172,18 @@ export default function AdminUsersPage() {
   };
 
   const handleDownloadUsers = () => {
-    const escapeCsvValue = (value: string) =>
-      `"${String(value || "").replace(/"/g, '""')}"`;
-    const csv = [
-      "fullName,studentId",
-      ...users.map((user) =>
-        [
-          escapeCsvValue(user.fullName),
-          escapeCsvValue(user.studentId),
-        ].join(","),
-      ),
-    ].join("\n");
-
-    const blob = new Blob(["\uFEFF", csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "voters-export.csv";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    void (async () => {
+      const XLSX = await import("xlsx");
+      const worksheet = XLSX.utils.json_to_sheet(
+        users.map((user) => ({
+          fullName: user.fullName,
+          studentId: user.studentId,
+        })),
+      );
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Voters");
+      XLSX.writeFile(workbook, "voters-export.xlsx");
+    })();
   };
 
   const handleImportFile = async (
@@ -204,31 +198,31 @@ export default function AdminUsersPage() {
     setImporting(true);
 
     try {
-      const { default: Papa } = await import("papaparse");
-      const parsed = await new Promise<{ data: Record<string, unknown>[] }>(
-        (resolve, reject) => {
-          Papa.parse<Record<string, unknown>>(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: (result) =>
-              resolve({
-                data: (result.data || []) as Record<string, unknown>[],
-              }),
-            error: (parseError) => reject(parseError),
-          });
-        },
-      );
+      const XLSX = await import("xlsx");
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
 
-      const rows = parsed.data
+      if (!firstSheetName) {
+        setImportError("Excel file does not contain any worksheet.");
+        return;
+      }
+
+      const worksheet = workbook.Sheets[firstSheetName];
+      const parsedRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+        defval: "",
+      });
+
+      const rows = parsedRows
         .map(normalizeImportRow)
         .filter((row) => row.fullName || row.studentId);
 
       if (rows.length === 0) {
-        setImportError("CSV does not contain any importable rows.");
+        setImportError("Excel file does not contain any importable rows.");
         return;
       }
 
-      const res = await usersApi.importCsv(rows);
+      const res = await usersApi.importExcelRows(rows);
       const created = Array.isArray(res.data?.created)
         ? res.data.created.map(normalizeUser)
         : [];
@@ -240,8 +234,8 @@ export default function AdminUsersPage() {
       }
 
       setImportMessage(
-        `Imported ${created.length} row(s)${
-          skipped.length > 0 ? `, skipped ${skipped.length}` : ""
+        `ນຳເຂົ້າສຳເລັດ ${created.length} ແຖວ${
+          skipped.length > 0 ? `, ຂ້າມ ${skipped.length} ແຖວ` : ""
         }.`,
       );
     } catch (err: unknown) {
@@ -253,7 +247,7 @@ export default function AdminUsersPage() {
       setImportError(
         Array.isArray(message)
           ? message.join(", ")
-          : message || typedErr?.message || "CSV import failed",
+          : message || typedErr?.message || "ນຳເຂົ້າ Excel ບໍ່ສຳເລັດ",
       );
     } finally {
       setImporting(false);
@@ -265,7 +259,7 @@ export default function AdminUsersPage() {
     setFormError("");
 
     if (!form.fullName.trim() || !form.studentId.trim()) {
-      setFormError("Full name and student ID are required.");
+      setFormError("ກະລຸນາປ້ອນຊື່-ນາມສະກຸນ ແລະ ລະຫັດນັກສຶກສາ");
       return;
     }
 
@@ -300,7 +294,7 @@ export default function AdminUsersPage() {
       setFormError(
         Array.isArray(message)
           ? message.join(", ")
-          : message || typedErr?.message || "Failed to save voter",
+          : message || typedErr?.message || "ບໍ່ສາມາດບັນທຶກຜູ້ໂຫວດໄດ້",
       );
     } finally {
       setSaving(false);
@@ -324,7 +318,7 @@ export default function AdminUsersPage() {
 
   const handleDelete = async (user: ManagedUser) => {
     const label = user.fullName || user.studentId;
-    const confirmed = window.confirm(`Delete voter "${label}"?`);
+    const confirmed = window.confirm(`ຕ້ອງການລົບຜູ້ໂຫວດ "${label}" ຫຼືບໍ?`);
     if (!confirmed) return;
 
     setDeletingId(user.id);
@@ -345,7 +339,7 @@ export default function AdminUsersPage() {
       setPageError(
         Array.isArray(message)
           ? message.join(", ")
-          : message || typedErr?.message || "Failed to delete voter",
+          : message || typedErr?.message || "ບໍ່ສາມາດລົບຜູ້ໂຫວດໄດ້",
       );
     } finally {
       setDeletingId("");
@@ -380,7 +374,7 @@ export default function AdminUsersPage() {
       selectedUserIds.includes(user.id),
     );
     const confirmed = window.confirm(
-      `Delete ${selectedUsers.length} selected voter(s)?`,
+      `ຕ້ອງການລົບຜູ້ໂຫວດທີ່ເລືອກ ${selectedUsers.length} ລາຍການຫຼືບໍ?`,
     );
     if (!confirmed) return;
 
@@ -417,7 +411,7 @@ export default function AdminUsersPage() {
     }
 
     if (failedUsers.length > 0) {
-      setPageError(`Delete failed for: ${failedUsers.join(", ")}`);
+      setPageError(`ລົບບໍ່ສຳເລັດ: ${failedUsers.join(", ")}`);
     }
 
     setBulkDeleting(false);
@@ -425,58 +419,54 @@ export default function AdminUsersPage() {
 
   return (
     <AdminRoute>
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                Manage Voters
-              </h1>
-              <p className="text-sm text-slate-500">
-                Voters now use only full name and student ID.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-            >
-              <Plus className="h-4 w-4" />
-              Create voter
-            </button>
-          </div>
+      <div className="admin-page">
+        <div className="admin-page-container space-y-6">
+          <PageHeader
+            title="ຈັດການຜູ້ໂຫວດ"
+            subtitle="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດນັກສຶກສາ"
+            actions={
+              <button
+                type="button"
+                onClick={handleCreate}
+                className="admin-btn-primary"
+              >
+                <Plus className="h-4 w-4" />
+                ເພີ່ມຜູ້ໂຫວດ
+              </button>
+            }
+          />
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="admin-card p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  Import from CSV
+                <p className="text-sm font-semibold text-[var(--admin-text)]">
+                  ນຳເຂົ້າຈາກ Excel
                 </p>
-                <p className="text-xs text-slate-500">
-                  Supported columns: `fullName`, `studentId`
+                <p className="text-xs text-[var(--admin-text-muted)]">
+                  ຄໍລຳທີ່ຮອງຮັບ: `fullName`, `studentId`
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={handleDownloadUsers}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                  className="admin-btn-secondary"
                 >
                   <Download className="h-4 w-4" />
-                  Export voters CSV
+                  ສົ່ງອອກຜູ້ໂຫວດ Excel
                 </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+                  className="admin-btn-primary"
                 >
                   <Upload className="h-4 w-4" />
-                  Choose CSV
+                  ເລືອກໄຟລ໌ Excel
                 </button>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   className="hidden"
                   onChange={handleImportFile}
                 />
@@ -487,76 +477,78 @@ export default function AdminUsersPage() {
               <p className="mt-3 text-sm text-rose-600">{importError}</p>
             ) : null}
             {importMessage ? (
-              <p className="mt-3 text-sm text-emerald-600">{importMessage}</p>
+              <p className="mt-3 text-sm text-emerald-700">{importMessage}</p>
             ) : null}
             {importing ? (
-              <p className="mt-3 text-xs text-slate-500">Importing CSV...</p>
+              <p className="mt-3 text-xs text-[var(--admin-text-muted)]">
+                ກຳລັງນຳເຂົ້າ Excel...
+              </p>
             ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Total voters</p>
-              <p className="mt-2 text-3xl font-bold text-slate-900">
+            <div className="admin-stat-card p-5">
+              <p className="text-sm text-[var(--admin-text-muted)]">ຜູ້ໂຫວດທັງໝົດ</p>
+              <p className="mt-2 text-3xl font-bold text-[var(--admin-text)]">
                 {stats.total}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Filtered</p>
-              <p className="mt-2 text-3xl font-bold text-slate-900">
+            <div className="admin-stat-card p-5">
+              <p className="text-sm text-[var(--admin-text-muted)]">ຕາມຕົວກອງ</p>
+              <p className="mt-2 text-3xl font-bold text-[var(--admin-text)]">
                 {stats.filtered}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-500">Selected</p>
-              <p className="mt-2 text-3xl font-bold text-slate-900">
+            <div className="admin-stat-card p-5">
+              <p className="text-sm text-[var(--admin-text-muted)]">ທີ່ເລືອກ</p>
+              <p className="mt-2 text-3xl font-bold text-[var(--admin-text)]">
                 {stats.selected}
               </p>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-4">
+          <div className="admin-table-shell">
+            <div className="border-b border-[var(--admin-border)] p-4">
               <input
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by full name or student ID"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+                placeholder="ຄົ້ນຫາດ້ວຍຊື່ ຫຼື ລະຫັດນັກສຶກສາ"
+                className="admin-input"
               />
             </div>
 
             {selectedUserIds.length > 0 ? (
-              <div className="flex items-center justify-between border-b border-slate-200 bg-rose-50 px-4 py-3">
-                <span className="text-sm text-slate-700">
-                  {selectedUserIds.length} selected
+              <div className="flex items-center justify-between border-b border-rose-200 bg-[#fcf1f2] px-4 py-3">
+                <span className="text-sm text-[var(--admin-text)]">
+                  ເລືອກແລ້ວ {selectedUserIds.length} ລາຍການ
                 </span>
                 <button
                   type="button"
                   onClick={() => void handleDeleteSelected()}
                   disabled={bulkDeleting}
-                  className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="admin-btn-danger"
                 >
                   <Trash2 className="h-4 w-4" />
-                  {bulkDeleting ? "Deleting..." : "Delete selected"}
+                  {bulkDeleting ? "ກຳລັງລົບ..." : "ລົບທີ່ເລືອກ"}
                 </button>
               </div>
             ) : null}
 
-            {loading ? <LoadingState label="Loading voters..." /> : null}
+            {loading ? <LoadingState label="ກຳລັງໂຫຼດຜູ້ໂຫວດ..." /> : null}
 
             {!loading && pageError ? (
               <div className="p-4">
                 <ErrorState
-                  title="Failed to load voters"
+                  title="ໂຫຼດຜູ້ໂຫວດບໍ່ສຳເລັດ"
                   description={pageError}
                   action={
                     <button
                       type="button"
                       onClick={() => void fetchUsers()}
-                      className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+                      className="admin-btn-primary"
                     >
-                      Retry
+                      ລອງອີກຄັ້ງ
                     </button>
                   }
                 />
@@ -566,49 +558,49 @@ export default function AdminUsersPage() {
             {!loading && !pageError && filteredUsers.length === 0 ? (
               <div className="p-4">
                 <EmptyState
-                  title="No voters yet"
-                  description="Create a voter or import them from CSV."
+                  title="ຍັງບໍ່ມີຜູ້ໂຫວດ"
+                  description="ເພີ່ມຜູ້ໂຫວດເອງ ຫຼື ນຳເຂົ້າຈາກ Excel"
                 />
               </div>
             ) : null}
 
             {!loading && !pageError && filteredUsers.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
+                <table className="min-w-full divide-y divide-[var(--admin-border)]">
+                  <thead className="admin-table-head">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="admin-table-header-cell px-4 py-3 text-left">
                         <input
                           type="checkbox"
                           ref={selectAllRef}
                           checked={allPageSelected}
                           onChange={toggleSelectAllOnPage}
-                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          className="admin-checkbox"
                         />
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Full name
+                      <th className="admin-table-header-cell px-4 py-3 text-left">
+                        ຊື່-ນາມສະກຸນ
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Student ID
+                      <th className="admin-table-header-cell px-4 py-3 text-left">
+                        ລະຫັດນັກສຶກສາ
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Created
+                      <th className="admin-table-header-cell px-4 py-3 text-left">
+                        ສ້າງເມື່ອ
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Actions
+                      <th className="admin-table-header-cell px-4 py-3 text-right">
+                        ຈັດການ
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-[var(--admin-border)]">
                     {paginatedUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-slate-50/70">
+                      <tr key={user.id} className="admin-table-row">
                         <td className="px-4 py-4">
                           <input
                             type="checkbox"
                             checked={selectedUserIds.includes(user.id)}
                             onChange={() => toggleUserSelection(user.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            className="admin-checkbox"
                           />
                         </td>
                         <td className="px-4 py-4 text-sm font-medium text-slate-900">
@@ -625,8 +617,8 @@ export default function AdminUsersPage() {
                             <button
                               type="button"
                               onClick={() => handleEdit(user)}
-                              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 transition-colors hover:bg-slate-50"
-                              title="Edit"
+                              className="admin-icon-btn"
+                              title="ແກ້ໄຂ"
                             >
                               <PencilLine className="h-4 w-4" />
                             </button>
@@ -634,8 +626,8 @@ export default function AdminUsersPage() {
                               type="button"
                               onClick={() => void handleDelete(user)}
                               disabled={deletingId === user.id}
-                              className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white p-2 text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              title="Delete"
+                              className="admin-icon-btn-danger"
+                              title="ລົບ"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -647,10 +639,10 @@ export default function AdminUsersPage() {
                 </table>
 
                 {totalPages > 1 ? (
-                  <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-                    <div className="text-sm text-slate-700">
-                      Showing {(safeCurrentPage - 1) * pageSize + 1}-
-                      {Math.min(safeCurrentPage * pageSize, filteredUsers.length)} of{" "}
+                  <div className="flex items-center justify-between border-t border-[var(--admin-border)] px-4 py-3">
+                    <div className="text-sm text-[var(--admin-text)]">
+                      ສະແດງ {(safeCurrentPage - 1) * pageSize + 1}-
+                      {Math.min(safeCurrentPage * pageSize, filteredUsers.length)} ຈາກ{" "}
                       {filteredUsers.length}
                     </div>
                     <div className="flex items-center gap-2">
@@ -660,12 +652,12 @@ export default function AdminUsersPage() {
                           setCurrentPage((prev) => Math.max(1, prev - 1))
                         }
                         disabled={safeCurrentPage === 1}
-                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="admin-btn-secondary px-3 py-1.5"
                       >
-                        Previous
+                        ກ່ອນໜ້າ
                       </button>
-                      <span className="text-sm text-slate-500">
-                        Page {safeCurrentPage} / {totalPages}
+                      <span className="text-sm text-[var(--admin-text-muted)]">
+                        ໜ້າ {safeCurrentPage} / {totalPages}
                       </span>
                       <button
                         type="button"
@@ -675,9 +667,9 @@ export default function AdminUsersPage() {
                           )
                         }
                         disabled={safeCurrentPage === totalPages}
-                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="admin-btn-secondary px-3 py-1.5"
                       >
-                        Next
+                        ຕໍ່ໄປ
                       </button>
                     </div>
                   </div>
@@ -691,13 +683,13 @@ export default function AdminUsersPage() {
       <ModalShell
         open={isModalOpen}
         onClose={resetForm}
-        title={editingUser ? "Edit voter" : "Create voter"}
-        description="Voters use full name and student ID only."
+        title={editingUser ? "ແກ້ໄຂຜູ້ໂຫວດ" : "ເພີ່ມຜູ້ໂຫວດ"}
+        description="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດນັກສຶກສາເທົ່ານັ້ນ"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              Full name
+              ຊື່-ນາມສະກຸນ
             </label>
             <input
               type="text"
@@ -708,14 +700,14 @@ export default function AdminUsersPage() {
                   fullName: event.target.value,
                 }))
               }
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+              className="admin-input"
               placeholder="Somsack Sivilay"
             />
           </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              Student ID
+              ລະຫັດນັກສຶກສາ
             </label>
             <input
               type="text"
@@ -726,7 +718,7 @@ export default function AdminUsersPage() {
                   studentId: event.target.value,
                 }))
               }
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
+              className="admin-input"
               placeholder="20230001"
             />
           </div>
@@ -737,20 +729,20 @@ export default function AdminUsersPage() {
             <button
               type="button"
               onClick={resetForm}
-              className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              className="admin-btn-secondary flex-1"
             >
-              Cancel
+              ຍົກເລີກ
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
+              className="admin-btn-primary flex-1"
             >
               {saving
-                ? "Saving..."
+                ? "ກຳລັງບັນທຶກ..."
                 : editingUser
-                  ? "Save changes"
-                  : "Create voter"}
+                  ? "ບັນທຶກ"
+                  : "ເພີ່ມຜູ້ໂຫວດ"}
             </button>
           </div>
         </form>

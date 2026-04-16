@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { ObjectId, type Db } from 'mongodb';
-import { connectToDatabase } from './mongodb';
-import type { UserDocument } from './userAuth';
+import { getAdminDb } from './firebaseAdmin';
+import { getUserById } from './firestoreData';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'vote-next-secret-key';
 
@@ -14,7 +13,7 @@ export type AuthPayload = {
 };
 
 export type AuthContext = {
-    db: Db;
+    db: ReturnType<typeof getAdminDb>;
     payload: AuthPayload;
 };
 
@@ -38,15 +37,15 @@ export async function getAuthContext(request: Request, requiredRole?: 'admin' | 
             return null;
         }
 
-        const { db } = await connectToDatabase();
+        const db = getAdminDb();
         if (payload.role === 'user') {
             const userId = String(payload.id || '').trim();
             const deviceId = readDeviceId(request);
-            if (!userId || !ObjectId.isValid(userId) || !deviceId) {
+            if (!userId || !deviceId) {
                 return null;
             }
 
-            const user = await db.collection<UserDocument>('users').findOne({ _id: new ObjectId(userId) });
+            const user = await getUserById(userId);
             if (!user) {
                 return null;
             }

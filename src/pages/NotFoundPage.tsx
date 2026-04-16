@@ -13,10 +13,10 @@ export default function NotFoundPage() {
                         {'ບໍ່ພົບໜ້ານີ້ ຫຼື ຖືກລຶບອອກຈາກລະບົບແລ້ວ'}
                     </p>
                     <button
-                        onClick={() => router.push('/')}
+                        onClick={() => router.push('/login')}
                         className="mt-5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
                     >
-                        {'ກັບໄປໜ້າຫຼັກ'}
+                        {'ກັບໄປໜ້າເຂົ້າລະບົບ'}
                     </button>
                 </div>
             </div>

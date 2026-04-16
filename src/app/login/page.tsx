@@ -8,14 +8,14 @@ import apiClient from "../../lib/apiClient";
 
 const localTranslations: Record<string, string> = {
   error_device_active_with_attempts:
-    "Account is active on another device. {{count}} attempts left before temporary lock.",
+    "ບັນຊີນີ້ກຳລັງໃຊ້ຢູ່ອີກອຸປະກອນໜຶ່ງ. ເຫຼືອອີກ {{count}} ຄັ້ງກ່ອນຖືກລັອກຊົ່ວຄາວ",
   error_device_active:
-    "Account is active on another device. Please logout there first.",
+    "ບັນຊີນີ້ກຳລັງໃຊ້ຢູ່ອີກອຸປະກອນໜຶ່ງ. ກະລຸນາອອກຈາກລະບົບທີ່ນັ້ນກ່ອນ",
   error_temporarily_locked_seconds:
-    "Account is temporarily locked. Try again after {{seconds}} seconds.",
+    "ບັນຊີນີ້ຖືກລັອກຊົ່ວຄາວ. ກະລຸນາລອງອີກຄັ້ງຫຼັງ {{seconds}} ວິນາທີ",
   error_temporarily_locked:
-    "Account is temporarily locked due to too many login attempts.",
-  error_login_failed: "Login failed. Please try again.",
+    "ບັນຊີນີ້ຖືກລັອກຊົ່ວຄາວເນື່ອງຈາກພະຍາຍາມເຂົ້າລະບົບຫຼາຍເກີນໄປ",
+  error_login_failed: "ເຂົ້າລະບົບບໍ່ສຳເລັດ. ກະລຸນາລອງອີກຄັ້ງ",
 };
 
 function LoginContent() {
@@ -79,13 +79,13 @@ function LoginContent() {
       if (remaining) {
         return resolveText(
           "error_device_active_with_attempts",
-          `Account is active on another device. ${remaining} attempts left before temporary lock.`,
+          `ບັນຊີນີ້ກຳລັງໃຊ້ຢູ່ອີກອຸປະກອນໜຶ່ງ. ເຫຼືອອີກ ${remaining} ຄັ້ງກ່ອນຖືກລັອກຊົ່ວຄາວ`,
           { count: remaining },
         );
       }
       return resolveText(
         "error_device_active",
-        "Account is active on another device. Please logout there first.",
+        "ບັນຊີນີ້ກຳລັງໃຊ້ຢູ່ອີກອຸປະກອນໜຶ່ງ. ກະລຸນາອອກຈາກລະບົບທີ່ນັ້ນກ່ອນ",
       );
     }
 
@@ -98,13 +98,13 @@ function LoginContent() {
       if (seconds) {
         return resolveText(
           "error_temporarily_locked_seconds",
-          `Account is temporarily locked. Try again after ${seconds} seconds.`,
+          `ບັນຊີນີ້ຖືກລັອກຊົ່ວຄາວ. ກະລຸນາລອງອີກຄັ້ງຫຼັງ ${seconds} ວິນາທີ`,
           { seconds },
         );
       }
       return resolveText(
         "error_temporarily_locked",
-        "Account is temporarily locked due to too many login attempts.",
+        "ບັນຊີນີ້ຖືກລັອກຊົ່ວຄາວເນື່ອງຈາກພະຍາຍາມເຂົ້າລະບົບຫຼາຍເກີນໄປ",
       );
     }
 
@@ -138,13 +138,13 @@ function LoginContent() {
 
     if (blockedSeconds > 0) {
       setError(
-        `Account is temporarily locked. Try again after ${blockedSeconds} seconds.`,
+        `ບັນຊີນີ້ຖືກລັອກຊົ່ວຄາວ. ກະລຸນາລອງອີກຄັ້ງຫຼັງ ${blockedSeconds} ວິນາທີ`,
       );
       return;
     }
 
     if (!studentId.trim()) {
-      setError("Student ID is required.");
+      setError("ກະລຸນາປ້ອນລະຫັດນັກສຶກສາ");
       return;
     }
 
@@ -155,7 +155,9 @@ function LoginContent() {
         studentId: studentId.trim(),
       });
       const { user, accessToken } = res.data;
-      if (!user || !accessToken) throw new Error("Invalid login response");
+      if (!user || !accessToken) {
+        throw new Error("ຂໍ້ມູນຕອບກັບບໍ່ຖືກຕ້ອງ");
+      }
       login(user, accessToken);
       router.replace(redirect);
     } catch (err: unknown) {
@@ -192,11 +194,9 @@ function LoginContent() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900">
-            {"ເວັບໂຫວດ"}
-          </h1>
+          <h1 className="text-2xl font-extrabold text-slate-900">ເວັບໂຫວດ</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {"ເຂົ້າລະບົບດ້ວຍລະຫັດນັກສຶກສາ"}
+            ເຂົ້າລະບົບດ້ວຍລະຫັດນັກສຶກສາ
           </p>
         </div>
 
@@ -206,7 +206,7 @@ function LoginContent() {
         >
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              {"ລະຫັດນັກສຶກສາ"}
+              ລະຫັດນັກສຶກສາ
             </label>
             <input
               type="text"
@@ -215,7 +215,7 @@ function LoginContent() {
                 setStudentId(event.target.value);
                 setError("");
               }}
-              placeholder={"20230001"}
+              placeholder="20230001"
               autoCapitalize="none"
               autoCorrect="off"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
@@ -225,7 +225,7 @@ function LoginContent() {
           {error ? (
             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
               <p className="text-xs font-semibold text-rose-700">
-                {"ເຂົ້າລະບົບບໍ່ສຳເລັດ"}
+                ເຂົ້າລະບົບບໍ່ສຳເລັດ
               </p>
               <p className="mt-1 text-xs text-rose-600">{error}</p>
             </div>

@@ -4,14 +4,6 @@ export interface RoomStatusChangedPayload {
     ownerAdminId?: string;
 }
 
-export interface VoteNewPayload {
-    roomId: string;
-    candidateId?: string;
-    voteCount?: number;
-    selectedIds?: string[];
-    userId?: string;
-}
-
 export interface RoomProgressUpdatedPayload {
     roomId: string;
     totalVotes: number;
