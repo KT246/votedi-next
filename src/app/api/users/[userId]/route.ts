@@ -52,18 +52,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             updatedAt: new Date(),
         };
 
-        if (typeof body?.username === 'string') {
-            const username = normalizeText(body.username).toLowerCase();
-            if (!username) {
-                return NextResponse.json({ message: 'Username is required' }, { status: 400 });
-            }
-            const existingUsername = await users.findOne({ username, _id: { $ne: new ObjectId(userId) } });
-            if (existingUsername) {
-                return NextResponse.json({ message: 'Username already exists' }, { status: 409 });
-            }
-            updates.username = username;
-        }
-
         if (typeof body?.fullName === 'string' || typeof body?.name === 'string') {
             const fullName = normalizeText(body.fullName ?? body.name);
             if (!fullName) {
@@ -77,16 +65,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         }
 
         const studentIdValue = typeof body?.studentId === 'string' ? normalizeText(body.studentId) : '';
-        const shouldResetPassword = Boolean(body?.resetPasswordToStudentId);
         if (studentIdValue) {
             const existingStudentId = await users.findOne({ studentId: studentIdValue, _id: { $ne: new ObjectId(userId) } });
             if (existingStudentId) {
                 return NextResponse.json({ message: 'Student ID already exists' }, { status: 409 });
             }
             updates.studentId = studentIdValue;
-            if (studentIdValue !== currentUser.studentId || shouldResetPassword) {
+            if (studentIdValue !== currentUser.studentId) {
                 updates.password = await bcrypt.hash(studentIdValue, 10);
-                updates.mustChangePassword = true;
+                updates.mustChangePassword = false;
             }
         }
 

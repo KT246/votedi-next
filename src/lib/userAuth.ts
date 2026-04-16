@@ -5,7 +5,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'vote-next-secret-key';
 
 export type UserDocument = {
     _id?: ObjectId;
-    username: string;
     fullName: string;
     studentId: string;
     avatar?: string;
@@ -26,11 +25,10 @@ export function normalizeText(value: unknown): string {
 export function serializeUser(user: UserDocument) {
     return {
         id: user._id?.toString() || '',
-        username: user.username,
         fullName: user.fullName,
+        studentId: user.studentId,
         avatar: user.avatar || '',
         role: 'user',
-        mustChangePassword: Boolean(user.mustChangePassword),
         createdByAdminId: user.createdByAdminId || '',
         createdAt: user.createdAt?.toISOString?.() || '',
         updatedAt: user.updatedAt?.toISOString?.() || '',
@@ -40,12 +38,10 @@ export function serializeUser(user: UserDocument) {
 export function serializeManagedUser(user: UserDocument) {
     return {
         id: user._id?.toString() || '',
-        username: user.username,
         fullName: user.fullName,
         studentId: user.studentId,
         avatar: user.avatar || '',
         role: 'user',
-        mustChangePassword: Boolean(user.mustChangePassword),
         createdByAdminId: user.createdByAdminId || '',
         createdAt: user.createdAt?.toISOString?.() || '',
         updatedAt: user.updatedAt?.toISOString?.() || '',
@@ -56,7 +52,7 @@ export function signUserToken(user: UserDocument) {
     return jwt.sign(
         {
             id: user._id?.toString() || '',
-            username: user.username,
+            studentId: user.studentId,
             role: 'user',
             createdByAdminId: user.createdByAdminId || '',
         },

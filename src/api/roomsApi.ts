@@ -21,8 +21,8 @@ export const roomsApi = {
     delete: (id: string) => apiClient.delete(`/rooms/${id}`),
 
     // User management (allowed voters)
-    addUser: (roomId: string, username: string, fullName: string) =>
-        apiClient.post(`/rooms/${roomId}/users`, { username, fullName }),
+    addUser: (roomId: string, studentId: string, fullName: string) =>
+        apiClient.post(`/rooms/${roomId}/users`, { studentId, fullName }),
 
     removeUser: (roomId: string, userId: string) =>
         apiClient.delete(`/rooms/${roomId}/users/${userId}`),

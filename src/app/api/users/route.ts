@@ -4,14 +4,9 @@ import bcrypt from 'bcryptjs';
 import { getAuthContext } from '@/lib/serverAuth';
 import { normalizeText, serializeManagedUser, type UserDocument } from '@/lib/userAuth';
 
-function normalizeUsername(value: unknown): string {
-    return normalizeText(value).toLowerCase();
-}
-
 function normalizeAvatar(value: unknown): string {
     return normalizeText(value);
 }
-
 export async function GET(request: NextRequest) {
     const auth = await getAuthContext(request, 'admin');
     if (!auth) {
@@ -35,21 +30,15 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const username = normalizeUsername(body?.username);
         const fullName = normalizeText(body?.fullName ?? body?.name);
         const studentId = normalizeText(body?.studentId);
         const avatar = normalizeAvatar(body?.avatar);
 
-        if (!username || !fullName || !studentId) {
-            return NextResponse.json({ message: 'Username, name and student ID are required' }, { status: 400 });
+        if (!fullName || !studentId) {
+            return NextResponse.json({ message: 'Full name and student ID are required' }, { status: 400 });
         }
 
         const users = auth.db.collection<UserDocument>('users');
-        const existingUsername = await users.findOne({ username });
-        if (existingUsername) {
-            return NextResponse.json({ message: 'Username already exists' }, { status: 409 });
-        }
-
         const existingStudentId = await users.findOne({ studentId });
         if (existingStudentId) {
             return NextResponse.json({ message: 'Student ID already exists' }, { status: 409 });
@@ -57,12 +46,11 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const result = await users.insertOne({
-            username,
             fullName,
             studentId,
             avatar,
             password: await bcrypt.hash(studentId, 10),
-            mustChangePassword: true,
+            mustChangePassword: false,
             createdByAdminId: auth.payload.id || '',
             role: 'user',
             createdAt: now,

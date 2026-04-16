@@ -12,9 +12,7 @@ export type StoredUserSession = {
 
 export function sanitizeUserSessionUser(user: User | null | undefined): User | null {
   if (!user) return null;
-  const safeUser = { ...user };
-  delete safeUser.studentId;
-  return safeUser;
+  return { ...user };
 }
 
 export function buildStoredUserSession(user: User | null, token: string, now = Date.now()) {

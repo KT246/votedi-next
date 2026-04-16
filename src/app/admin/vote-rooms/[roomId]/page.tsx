@@ -1350,7 +1350,7 @@ export default function AdminVoteRoomDetailPage() {
                                       ຊື່
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                      Username
+                                      Student ID
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                                       ສະຖານະ
@@ -1367,7 +1367,7 @@ export default function AdminVoteRoomDetailPage() {
                                         {row.fullName}
                                       </td>
                                       <td className="px-4 py-3 text-sm text-slate-600">
-                                        {row.username}
+                                        {row.studentId}
                                       </td>
                                       <td className="px-4 py-3 text-sm">
                                         <span

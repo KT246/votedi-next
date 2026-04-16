@@ -45,9 +45,10 @@ export default function AdminChangePasswordPage() {
         password: form.current,
       });
 
-      const authenticatedAdminId = (loginRes.data?.user?.id as string) || adminId;
+      const authenticatedAdminId =
+        (loginRes.data?.user?.id as string) || adminId;
       if (!authenticatedAdminId) {
-        throw new Error('Admin ID is missing');
+        throw new Error("Admin ID is missing");
       }
 
       await apiClient.patch(`/admins/${authenticatedAdminId}`, {

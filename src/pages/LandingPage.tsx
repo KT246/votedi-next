@@ -4,8 +4,9 @@ import { useAuthStore } from '../store/authStore';
 import { onAvatarError, toDisplayAvatarUrl } from '../utils/avatar';
 
 export default function LandingPage() {
-        const user = useAuthStore((state) => state.currentUser);
+    const user = useAuthStore((state) => state.currentUser);
     const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+    const userLabel = user?.fullName || user?.studentId || 'user';
 
     return (
         <div className="min-h-screen bg-slate-50 px-4 py-12">
@@ -23,9 +24,9 @@ export default function LandingPage() {
                 {isLoggedIn && user ? (
                     <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
                         <img
-                            src={toDisplayAvatarUrl(user.avatar, user.fullName || user.username)}
-                            alt={user.fullName || user.username}
-                            onError={(event) => onAvatarError(event, user.fullName || user.username)}
+                            src={toDisplayAvatarUrl(user.avatar, userLabel)}
+                            alt={userLabel}
+                            onError={(event) => onAvatarError(event, userLabel)}
                             className="h-11 w-11 rounded-2xl border border-slate-200 object-cover bg-slate-100"
                         />
                         <div className="text-left">

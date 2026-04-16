@@ -10,7 +10,6 @@ interface ForceChangePasswordModalProps {
 }
 
 export default function ForceChangePasswordModal({ required = true, onClose }: ForceChangePasswordModalProps) {
-        const user = useAuthStore((state) => state.currentUser);
     const login = useAuthStore((state) => state.login);
     const logout = useAuthStore((state) => state.logout);
 
@@ -20,7 +19,6 @@ export default function ForceChangePasswordModal({ required = true, onClose }: F
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
 
-    const accountName = user?.username ? `"${user.username}"` : 'ບັນຊີນີ້';
     const description = required
         ? 'ບັນຊີນີ້ຖືກສ້າງໂດຍ admin. ກະລຸນາປ່ຽນລະຫັດຜ່ານກ່ອນໃຊ້ງານ'
         : 'ເພື່ອຄວາມປອດໄພ ກະລຸນາປ່ຽນລະຫັດຜ່ານ';
@@ -59,8 +57,9 @@ export default function ForceChangePasswordModal({ required = true, onClose }: F
             setConfirmPassword('');
             setError('');
             if (!required) onClose?.();
-        } catch (err: any) {
-            const message = err?.response?.data?.message;
+        } catch (err: unknown) {
+            const typedErr = err as { response?: { data?: { message?: string | string[] } } };
+            const message = typedErr?.response?.data?.message;
             setError(Array.isArray(message) ? message.join(', ') : message || 'ປ່ຽນລະຫັດຜ່ານບໍ່ສຳເລັດ');
         } finally {
             setSubmitting(false);

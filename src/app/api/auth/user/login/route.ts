@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 
 import { connectToDatabase } from "@/lib/mongodb";
@@ -11,30 +10,26 @@ import {
 } from "@/lib/userAuth";
 import { readDeviceId } from "@/lib/serverAuth";
 
-// In-memory rate limiting for device conflict warnings
-// In production, consider using Redis or database
 const deviceConflictTracker = new Map<
   string,
   { count: number; lastAttempt: number; blockedUntil: number }
 >();
 
 const MAX_CONFLICT_ATTEMPTS = 5;
-const BLOCK_DURATION_MS = 60 * 1000; // 1 minute
-const RESET_WINDOW_MS = 60 * 1000; // Reset counter after 1 minute
+const BLOCK_DURATION_MS = 60 * 1000;
+const RESET_WINDOW_MS = 60 * 1000;
 
-function checkDeviceConflictRateLimit(username: string): {
+function checkDeviceConflictRateLimit(studentId: string): {
   allowed: boolean;
   remainingTime?: number;
 } {
   const now = Date.now();
-  const key = username.toLowerCase();
+  const key = studentId.toLowerCase();
 
-  // Clean up old entries periodically (every 100 calls)
   if (Math.random() < 0.01) {
-    // 1% chance
-    for (const [k, v] of deviceConflictTracker.entries()) {
-      if (now - v.lastAttempt > RESET_WINDOW_MS * 2) {
-        deviceConflictTracker.delete(k);
+    for (const [trackerKey, trackerValue] of deviceConflictTracker.entries()) {
+      if (now - trackerValue.lastAttempt > RESET_WINDOW_MS * 2) {
+        deviceConflictTracker.delete(trackerKey);
       }
     }
   }
@@ -42,7 +37,6 @@ function checkDeviceConflictRateLimit(username: string): {
   const record = deviceConflictTracker.get(key);
 
   if (!record) {
-    // First attempt
     deviceConflictTracker.set(key, {
       count: 0,
       lastAttempt: now,
@@ -51,27 +45,22 @@ function checkDeviceConflictRateLimit(username: string): {
     return { allowed: true };
   }
 
-  // Check if currently blocked
   if (record.blockedUntil > now) {
     return { allowed: false, remainingTime: record.blockedUntil - now };
   }
 
-  // If block window just expired, reset attempt count
   if (record.blockedUntil > 0 && record.blockedUntil <= now) {
     record.count = 0;
     record.blockedUntil = 0;
   }
 
-  // Reset counter if idle window passed since last conflict attempt
   if (now - record.lastAttempt > RESET_WINDOW_MS) {
     record.count = 0;
   }
 
-  // Count this conflict attempt
-  record.count++;
+  record.count += 1;
   record.lastAttempt = now;
 
-  // Check if should block
   if (record.count >= MAX_CONFLICT_ATTEMPTS) {
     record.blockedUntil = now + BLOCK_DURATION_MS;
     return { allowed: false, remainingTime: BLOCK_DURATION_MS };
@@ -82,51 +71,39 @@ function checkDeviceConflictRateLimit(username: string): {
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
-    const normalizedUsername = normalizeText(username).toLowerCase();
-    const normalizedPassword = normalizeText(password);
+    const { studentId } = await request.json();
+    const normalizedStudentId = normalizeText(studentId);
     const deviceId = readDeviceId(request);
 
-    if (!normalizedUsername || !normalizedPassword || !deviceId) {
+    if (!normalizedStudentId || !deviceId) {
       return NextResponse.json(
-        { message: "ຕ້ອງການຊື່ຜູ້ໃຊ້, ລະຫັດຜ່ານ ແລະ deviceId" },
+        { message: "Student ID and device ID are required" },
         { status: 400 },
       );
     }
 
     const { db } = await connectToDatabase();
     const users = db.collection<UserDocument>("users");
-    const user = await users.findOne({ username: normalizedUsername });
+    const user = await users.findOne({ studentId: normalizedStudentId });
 
     if (!user) {
       return NextResponse.json(
-        { message: "ຊື່ຜູ້ໃຊ້ ແລະລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ" },
-        { status: 401 },
-      );
-    }
-
-    const isValidPassword = await bcrypt.compare(
-      normalizedPassword,
-      user.password,
-    );
-    if (!isValidPassword) {
-      return NextResponse.json(
-        { message: "ຊື່ຜູ້ໃຊ້ ແລະລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ" },
+        { message: "Student ID is not valid" },
         { status: 401 },
       );
     }
 
     const activeDeviceId = String(user.activeDeviceId || "").trim();
     if (activeDeviceId && activeDeviceId !== deviceId) {
-      // Check rate limiting for device conflict warnings
-      const rateLimitResult = checkDeviceConflictRateLimit(normalizedUsername);
+      const rateLimitResult =
+        checkDeviceConflictRateLimit(normalizedStudentId);
       if (!rateLimitResult.allowed) {
         const remainingSeconds = Math.ceil(
           (rateLimitResult.remainingTime || 0) / 1000,
         );
         return NextResponse.json(
           {
-            message: `ເພີ່ມການພະຍາຍາມກວດເຊັກອຸປະກອນເກີນໄປ. ກະລຸນາລໍຖ້າອີກ ${remainingSeconds} ວິນາທີແລ້ວຄືນມາລອງໃໝ່.`,
+            message: `Too many device conflict attempts. Try again in ${remainingSeconds} seconds.`,
           },
           { status: 429 },
         );
@@ -134,8 +111,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          message:
-            "ບັນຊີນີ້ກຳລັງໃຊ້ຢູ່ໃນອຸປະກອນອື່ນ. ກະລຸນາອອກຈາກລະບົບນັ້ນກ່ອນ.",
+          message: "Account is active on another device. Please logout there first.",
         },
         { status: 409 },
       );
@@ -167,15 +143,13 @@ export async function POST(request: NextRequest) {
     if (bindResult.matchedCount === 0) {
       return NextResponse.json(
         {
-          message:
-            "Account is active on another device. Please logout there first.",
+          message: "Account is active on another device. Please logout there first.",
         },
         { status: 409 },
       );
     }
 
-    // Reset rate limiting counter on successful login
-    deviceConflictTracker.delete(normalizedUsername.toLowerCase());
+    deviceConflictTracker.delete(normalizedStudentId.toLowerCase());
 
     return NextResponse.json({
       accessToken: signUserToken(user),

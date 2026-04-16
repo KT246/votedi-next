@@ -1,20 +1,19 @@
-﻿"use client";
+"use client";
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '../store/authStore';
 import apiClient from '../api/apiClient';
 
 const localTranslations: Record<string, string> = {
-    error_device_active_with_attempts: 'ບັນຊີນີ້ກຳລັງໃຊ້ຢູ່ອຸປະກອນອື່ນ. ຍັງເຫຼືອ {{count}} ຄັ້ງກ່ອນຖືກລັອກຊົ່ວຄາວ',
-    error_device_active: 'ບັນຊີນີ້ກຳລັງໃຊ້ຢູ່ອຸປະກອນອື່ນ. ກະລຸນາອອກຈາກລະບົບທີ່ນັ້ນກ່ອນ',
-    error_temporarily_locked_seconds: 'ບັນຊີຖືກລັອກຊົ່ວຄາວ. ລອງໃໝ່ຫຼັງຈາກ {{seconds}} ວິນາທີ',
-    error_temporarily_locked: 'ບັນຊີຖືກລັອກຊົ່ວຄາວເນື່ອງຈາກພະຍາຍາມເຂົ້າລະບົບຫຼາຍເກີນໄປ',
-    error_login_failed: 'ເຂົ້າລະບົບບໍ່ສຳເລັດ. ກະລຸນາລອງໃໝ່.',
+    error_device_active_with_attempts: 'Account is active on another device. {{count}} attempts left before temporary lock.',
+    error_device_active: 'Account is active on another device. Please logout there first.',
+    error_temporarily_locked_seconds: 'Account is temporarily locked. Try again after {{seconds}} seconds.',
+    error_temporarily_locked: 'Account is temporarily locked due to too many login attempts.',
+    error_login_failed: 'Login failed. Please try again.',
 };
 
 export default function LoginPage() {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
+    const [studentId, setStudentId] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const login = useAuthStore((state) => state.login);
@@ -39,7 +38,7 @@ export default function LoginPage() {
         const typedErr = err as { response?: { data?: { message?: string | string[] } }; message?: string };
         const message = typedErr?.response?.data?.message;
         if (Array.isArray(message)) return message.join(', ');
-        return message || typedErr?.message || 'ເຂົ້າລະບົບບໍ່ສຳເລັດ. ກະລຸນາລອງໃໝ່.';
+        return message || typedErr?.message || localTranslations.error_login_failed;
     }
 
     function normalizeLoginError(message: string): string {
@@ -48,8 +47,8 @@ export default function LoginPage() {
         const resolveText = (key: string, fallback: string, options?: Record<string, unknown>) => {
             let text = localTranslations[key] ?? fallback;
             if (options) {
-                for (const [k, v] of Object.entries(options)) {
-                    text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v));
+                for (const [optionKey, value] of Object.entries(options)) {
+                    text = text.replace(new RegExp(`\\{\\{${optionKey}\\}\\}`, 'g'), String(value));
                 }
             }
             return text;
@@ -85,8 +84,8 @@ export default function LoginPage() {
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
 
-        if (!username.trim() || !password.trim()) {
-            setError('ກະລຸນາປ້ອນຊື່ຜູ້ໃຊ້.');
+        if (!studentId.trim()) {
+            setError('Student ID is required.');
             return;
         }
 
@@ -94,8 +93,7 @@ export default function LoginPage() {
         setError('');
         try {
             const res = await apiClient.post('/auth/user/login', {
-                username: username.trim(),
-                password,
+                studentId: studentId.trim(),
             });
             const { user, accessToken } = res.data;
             if (!user || !accessToken) throw new Error('Invalid login response');
@@ -119,36 +117,20 @@ export default function LoginPage() {
                         </svg>
                     </div>
                     <h1 className="text-2xl font-extrabold text-slate-900">{'ເວັບໂຫວດ'}</h1>
-                    <p className="mt-1 text-sm text-slate-500">{'ເຂົ້າລະບົບເພື່ອເຂົ້າຮ່ວມການເລືອກຕັ້ງ'}</p>
+                    <p className="mt-1 text-sm text-slate-500">{'ເຂົ້າລະບົບດ້ວຍລະຫັດນັກສຶກສາ'}</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-slate-700">{'ຊື່ຜູ້ໃຊ້ (username)'}</label>
+                        <label className="mb-1.5 block text-sm font-semibold text-slate-700">{'ລະຫັດນັກສຶກສາ'}</label>
                         <input
                             type="text"
-                            value={username}
+                            value={studentId}
                             onChange={(event) => {
-                                setUsername(event.target.value);
+                                setStudentId(event.target.value);
                                 setError('');
                             }}
-                            placeholder={'ຕົວຢ່າງ: somxay.sivilay'}
-                            autoCapitalize="none"
-                            autoCorrect="off"
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
-                        />
-                    </div>
-
-                    <div className="mt-3">
-                        <label className="mb-1.5 block text-sm font-semibold text-slate-700">{'ລະຫັດຜ່ານ'}</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(event) => {
-                                setPassword(event.target.value);
-                                setError('');
-                            }}
-                            placeholder={'ປ້ອນລະຫັດຜ່ານ'}
+                            placeholder={'20230001'}
                             autoCapitalize="none"
                             autoCorrect="off"
                             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-indigo-300 focus:bg-white focus:outline-none"
@@ -174,4 +156,3 @@ export default function LoginPage() {
         </div>
     );
 }
-

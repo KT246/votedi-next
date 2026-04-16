@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import apiClient from '../api/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { useVoteRoomStore } from '../store/voteRoomStore';
-import ForceChangePasswordModal from '../components/ForceChangePasswordModal';
 import LoadingState from '../components/ui/LoadingState';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
@@ -78,7 +77,6 @@ export default function MyRoomsPage() {
     const [rooms, setRooms] = useState<Room[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [showChangePassword, setShowChangePassword] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const reloadTimerRef = useRef<number | null>(null);
@@ -234,13 +232,13 @@ export default function MyRoomsPage() {
                         {mounted ? (
                             <div className="mt-2 flex items-center gap-3">
                                 <img
-                                    src={toDisplayAvatarUrl(user?.avatar, user?.fullName || user?.username || 'user')}
-                                    alt={user?.fullName || user?.username || 'user'}
-                                    onError={(event) => onAvatarError(event, user?.fullName || user?.username || 'user')}
+                                    src={toDisplayAvatarUrl(user?.avatar, user?.fullName || user?.studentId || 'user')}
+                                    alt={user?.fullName || user?.studentId || 'user'}
+                                    onError={(event) => onAvatarError(event, user?.fullName || user?.studentId || 'user')}
                                     className="h-11 w-11 rounded-2xl border border-slate-200 object-cover bg-slate-100"
                                 />
                                 <p className="text-sm text-slate-500">
-                                    {`ຍິນດີຕ້ອນຮັບ, ${user?.fullName || user?.username || '-'}`}
+                                    {`ຍິນດີຕ້ອນຮັບ, ${user?.fullName || user?.studentId || '-'}`}
                                 </p>
                             </div>
                         ) : (
@@ -248,12 +246,6 @@ export default function MyRoomsPage() {
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setShowChangePassword(true)}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                        >
-                            {'ປ່ຽນລະຫັດຜ່ານ'}
-                        </button>
                         <button
                             onClick={handleLogout}
                             className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
@@ -351,10 +343,6 @@ export default function MyRoomsPage() {
                     </div>
                 ) : null}
             </div>
-
-            {showChangePassword ? (
-                <ForceChangePasswordModal required={false} onClose={() => setShowChangePassword(false)} />
-            ) : null}
         </div>
     );
 }

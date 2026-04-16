@@ -1,8 +1,7 @@
 export interface User {
     id: string;
-    username: string;
     fullName: string;
-    studentId?: string;
+    studentId: string;
     avatar?: string;
     mustChangePassword?: boolean;
     createdByAdminId?: string;
@@ -64,8 +63,8 @@ export interface VoteRoom {
     maxSelection: number;
     status: VoteStatus;
     allowResultView: boolean;
-    candidates: string[] | any[];
-    allowedUsers: string[] | any[];
+    candidates: string[] | unknown[];
+    allowedUsers: string[] | unknown[];
     ownerAdminId?: string;  // which admin owns this room
     createdAt?: string;
     updatedAt?: string;
@@ -78,7 +77,7 @@ export interface VoteResult {
 
 export interface VoteParticipationRow {
     userId: string;
-    username: string;
+    studentId: string;
     fullName: string;
     hasVoted: boolean;
     selectedIds: string[];

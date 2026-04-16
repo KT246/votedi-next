@@ -8,6 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'vote-next-secret-key';
 export type AuthPayload = {
     id?: string;
     username?: string;
+    studentId?: string;
     role?: string;
     createdByAdminId?: string;
 };

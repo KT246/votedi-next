@@ -39,6 +39,7 @@ export default function RoomHeader() {
     const router = useRouter();
 
     const status = roomInfo ? STATUS_CONFIG[roomInfo.status] || STATUS_CONFIG.closed : STATUS_CONFIG.closed;
+    const userLabel = user?.fullName || user?.studentId || 'user';
 
     const handleLogout = async () => {
         try {
@@ -90,9 +91,9 @@ export default function RoomHeader() {
                     <div className="mt-2 flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2 text-slate-500">
                             <img
-                                src={toDisplayAvatarUrl(user.avatar, user.fullName || user.username)}
-                                alt={user.fullName || user.username}
-                                onError={(event) => onAvatarError(event, user.fullName || user.username)}
+                                src={toDisplayAvatarUrl(user.avatar, userLabel)}
+                                alt={userLabel}
+                                onError={(event) => onAvatarError(event, userLabel)}
                                 className="h-7 w-7 rounded-full border border-slate-200 object-cover bg-slate-100"
                             />
                             <span>

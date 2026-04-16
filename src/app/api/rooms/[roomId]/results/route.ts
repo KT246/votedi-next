@@ -26,7 +26,7 @@ type VoteDoc = {
 
 type UserDoc = {
     _id?: ObjectId;
-    username?: string;
+    studentId?: string;
     fullName?: string;
 };
 
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     let rows: Array<{
         userId: string;
-        username: string;
+        studentId: string;
         fullName: string;
         hasVoted: boolean;
         selectedIds: string[];
@@ -140,8 +140,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             const vote = voteByUserId.get(userId);
             return {
                 userId,
-                username: normalizeString(user?.username) || userId,
-                fullName: normalizeString(user?.fullName) || normalizeString(user?.username) || userId,
+                studentId: normalizeString(user?.studentId) || userId,
+                fullName: normalizeString(user?.fullName) || normalizeString(user?.studentId) || userId,
                 hasVoted: Boolean(vote),
                 selectedIds: Array.isArray(vote?.selectedIds)
                     ? vote.selectedIds.map((item: unknown) => normalizeString(item)).filter(Boolean)

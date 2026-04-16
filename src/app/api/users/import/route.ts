@@ -5,16 +5,11 @@ import { getAuthContext } from '@/lib/serverAuth';
 import { normalizeText, serializeManagedUser, type UserDocument } from '@/lib/userAuth';
 
 type ImportRow = {
-    username?: unknown;
     fullName?: unknown;
     name?: unknown;
     studentId?: unknown;
     avatar?: unknown;
 };
-
-function normalizeUsername(value: unknown): string {
-    return normalizeText(value).toLowerCase();
-}
 
 export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request, 'admin');
@@ -32,9 +27,7 @@ export async function POST(request: NextRequest) {
 
         const users = auth.db.collection<UserDocument>('users');
         const existingUsers = await users.find({}).toArray();
-        const existingUsernameSet = new Set(existingUsers.map((item) => String(item.username || '').toLowerCase()));
         const existingStudentIdSet = new Set(existingUsers.map((item) => String(item.studentId || '')));
-        const batchUsernameSet = new Set<string>();
         const batchStudentIdSet = new Set<string>();
 
         const created: UserDocument[] = [];
@@ -43,18 +36,12 @@ export async function POST(request: NextRequest) {
 
         for (let index = 0; index < rows.length; index += 1) {
             const row = rows[index] || {};
-            const username = normalizeUsername(row.username);
             const fullName = normalizeText(row.fullName ?? row.name);
             const studentId = normalizeText(row.studentId);
             const avatar = normalizeText(row.avatar);
 
-            if (!username || !fullName || !studentId) {
-                skipped.push({ row: index + 1, reason: 'Missing username, full name or student ID' });
-                continue;
-            }
-
-            if (existingUsernameSet.has(username) || batchUsernameSet.has(username)) {
-                skipped.push({ row: index + 1, reason: `Duplicate username: ${username}` });
+            if (!fullName || !studentId) {
+                skipped.push({ row: index + 1, reason: 'Missing full name or student ID' });
                 continue;
             }
 
@@ -63,16 +50,14 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            batchUsernameSet.add(username);
             batchStudentIdSet.add(studentId);
 
             created.push({
-                username,
                 fullName,
                 studentId,
                 avatar,
                 password: await bcrypt.hash(studentId, 10),
-                mustChangePassword: true,
+                mustChangePassword: false,
                 createdByAdminId: auth.payload.id || '',
                 role: 'user',
                 createdAt: now,
