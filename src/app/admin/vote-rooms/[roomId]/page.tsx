@@ -31,6 +31,7 @@ import StatusBadge from "../../../../components/ui/StatusBadge";
 import { roomsApi } from "../../../../api/roomsApi";
 import { useRoomSocket } from "../../../../hooks/useRoomSocket";
 import { formatLaoDateTime } from "../../../../lib/formatLaoDate";
+import { subscribeToRoomResults } from "../../../../lib/roomResultsRealtime";
 import type {
   Candidate,
   VoteParticipationRow,
@@ -279,6 +280,25 @@ function normalizeRoom(room: unknown, fallbackId = ""): AdminRoom {
   };
 }
 
+function buildParticipationState(
+  payload?: {
+    eligibleCount?: number;
+    votedCount?: number;
+    notVotedCount?: number;
+    rows?: VoteParticipationRow[];
+  } | null,
+  previousRows: VoteParticipationRow[] = [],
+) {
+  if (!payload) return null;
+
+  return {
+    eligibleCount: Number(payload.eligibleCount || 0),
+    votedCount: Number(payload.votedCount || 0),
+    notVotedCount: Number(payload.notVotedCount || 0),
+    rows: Array.isArray(payload.rows) ? payload.rows : previousRows,
+  };
+}
+
 export default function AdminVoteRoomDetailPage() {
   const params = useParams<{ roomId?: string | string[] }>();
   const roomParam = params?.roomId;
@@ -397,13 +417,15 @@ export default function AdminVoteRoomDetailPage() {
     setMounted(true);
   }, []);
 
-  const fetchResults = async () => {
+  const fetchResults = async (options?: { includeRows?: boolean }) => {
     if (!roomKey) return;
 
     setResultsLoading(true);
     setResultsError("");
     try {
-      const res = await roomsApi.getResults(roomKey);
+      const res = await roomsApi.getResults(roomKey, {
+        includeRows: options?.includeRows,
+      });
       const payload = res.data as {
         results?: unknown;
         participation?: {
@@ -423,17 +445,8 @@ export default function AdminVoteRoomDetailPage() {
           }).filter((item) => item.candidateId)
         : [];
       setResults(mappedResults);
-      setParticipation(
-        payload?.participation
-          ? {
-              eligibleCount: Number(payload.participation.eligibleCount || 0),
-              votedCount: Number(payload.participation.votedCount || 0),
-              notVotedCount: Number(payload.participation.notVotedCount || 0),
-              rows: Array.isArray(payload.participation.rows)
-                ? payload.participation.rows
-                : [],
-            }
-          : null,
+      setParticipation((previous) =>
+        buildParticipationState(payload?.participation, previous?.rows || []),
       );
     } catch (err: unknown) {
       const typedErr = err as {
@@ -446,7 +459,9 @@ export default function AdminVoteRoomDetailPage() {
           ? message.join(", ")
           : message || typedErr?.message || "ບໍ່ສາມາດໂຫຼດຜົນໄດ້",
       );
-      setParticipation(null);
+      if (options?.includeRows) {
+        setParticipation(null);
+      }
     } finally {
       setResultsLoading(false);
     }
@@ -454,9 +469,50 @@ export default function AdminVoteRoomDetailPage() {
 
   useEffect(() => {
     if (activeTab === "results" && room?.id) {
-      void fetchResults();
+      void fetchResults({ includeRows: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, room?.id]);
+
+  useEffect(() => {
+    if (activeTab !== "results" || !room?.id) return;
+
+    return subscribeToRoomResults(room.id, {
+      onChange: (snapshot) => {
+        if (!snapshot) {
+          setResults([]);
+          setParticipation((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  eligibleCount: 0,
+                  votedCount: 0,
+                  notVotedCount: 0,
+                }
+              : null,
+          );
+          return;
+        }
+
+        setResults(snapshot.results);
+        setParticipation((previous) =>
+          buildParticipationState(
+            {
+              eligibleCount: snapshot.eligibleCount,
+              votedCount: snapshot.votedCount,
+              notVotedCount: snapshot.notVotedCount,
+              rows: previous?.rows || [],
+            },
+            previous?.rows || [],
+          ),
+        );
+        setResultsError("");
+        setResultsLoading(false);
+      },
+      onError: (error) => {
+        console.error("Room results realtime error:", error);
+      },
+    });
   }, [activeTab, room?.id]);
 
   useRoomSocket({
@@ -473,7 +529,7 @@ export default function AdminVoteRoomDetailPage() {
 
       const nextStatus = normalizeStatus(payload.status);
       if (nextStatus === "closed") {
-        void fetchResults();
+        void fetchResults({ includeRows: true });
         return;
       }
 
@@ -481,12 +537,6 @@ export default function AdminVoteRoomDetailPage() {
         setResults([]);
         setResultsError("");
         setParticipation(null);
-      }
-    },
-    onRoomProgressUpdated: (payload) => {
-      if (normalizeRoomId(payload.roomId) !== normalizeRoomId(room?.id)) return;
-      if (activeTab === "results") {
-        void fetchResults();
       }
     },
     onRoomResultsReset: (payload) => {
@@ -1356,7 +1406,7 @@ export default function AdminVoteRoomDetailPage() {
                         action={
                           <button
                             type="button"
-                            onClick={() => void fetchResults()}
+                            onClick={() => void fetchResults({ includeRows: true })}
                             className="admin-btn-primary"
                           >
                             ລອງອີກຄັ້ງ
@@ -1442,7 +1492,7 @@ export default function AdminVoteRoomDetailPage() {
                                       ຊື່
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                      ລະຫັດນັກສຶກສາ
+                                      ລະຫັດ
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                                       ສະຖານະ

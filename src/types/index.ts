@@ -70,7 +70,7 @@ export interface VoteResultsResponse {
         eligibleCount: number;
         votedCount: number;
         notVotedCount: number;
-        rows: VoteParticipationRow[];
+        rows?: VoteParticipationRow[];
     };
 }
 

@@ -6,7 +6,6 @@ import {
 import { getAuthContext } from "@/lib/serverAuth";
 import {
   emitRoomLifecycleChanged,
-  emitRoomProgressUpdated,
 } from "@/lib/realtimeEmitter";
 
 function normalizeSelection(value: unknown): string[] {
@@ -59,18 +58,6 @@ export async function POST(
 
       return jsonError(result.status, result.code, result.message);
     }
-
-    await Promise.allSettled([
-      emitRoomProgressUpdated({
-        roomId: result.room.id,
-        totalVotes: result.results.totalVotes,
-        totalVoters: result.results.eligibleCount,
-        votedUsers: result.results.votedCount,
-        pendingUsers: result.results.notVotedCount,
-        lastVoterId: auth.payload.id,
-        ownerAdminId: result.room.ownerAdminId || "",
-      }),
-    ]);
 
     return NextResponse.json({
       success: true,

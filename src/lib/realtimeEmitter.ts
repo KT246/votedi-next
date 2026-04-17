@@ -1,6 +1,5 @@
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import type {
-  RoomProgressUpdatedPayload,
   RoomResultsResetPayload,
   RoomStatusChangedPayload,
 } from "@/api/socketEvents";
@@ -82,12 +81,6 @@ export async function emitRoomLifecycleChanged(
     emitRoomStatusChanged(payload),
     emitRoomsStatusChanged(payload),
   ]);
-}
-
-export async function emitRoomProgressUpdated(
-  payload: RoomProgressUpdatedPayload,
-): Promise<void> {
-  await triggerRealtimeEvent("room:progress-updated", payload);
 }
 
 export async function emitRoomResultsReset(

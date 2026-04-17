@@ -140,7 +140,7 @@ export default function LoginPage() {
     }
 
     if (!studentId.trim()) {
-      setError("ກະລຸນາປ້ອນລະຫັດນັກສຶກສາ");
+      setError("ກະລຸນາປ້ອນລະຫັດ");
       return;
     }
 
@@ -192,7 +192,7 @@ export default function LoginPage() {
           </div>
           <h1 className="text-2xl font-extrabold text-slate-900">ເວັບໂຫວດ</h1>
           <p className="mt-1 text-sm text-slate-500">
-            ເຂົ້າລະບົບດ້ວຍລະຫັດນັກສຶກສາ
+            ເຂົ້າລະບົບດ້ວຍລະຫັດ
           </p>
         </div>
 
@@ -202,7 +202,7 @@ export default function LoginPage() {
         >
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              ລະຫັດນັກສຶກສາ
+              ລະຫັດ
             </label>
             <input
               type="text"

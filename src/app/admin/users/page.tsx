@@ -58,6 +58,30 @@ function normalizeImportRow(row: Record<string, unknown>) {
   };
 }
 
+function compareStudentIds(left: string, right: string): number {
+  const normalizedLeft = left.trim();
+  const normalizedRight = right.trim();
+
+  const leftIsNumeric = /^\d+$/.test(normalizedLeft);
+  const rightIsNumeric = /^\d+$/.test(normalizedRight);
+
+  if (leftIsNumeric && rightIsNumeric) {
+    const leftNumber = Number(normalizedLeft);
+    const rightNumber = Number(normalizedRight);
+
+    if (leftNumber !== rightNumber) {
+      return leftNumber - rightNumber;
+    }
+
+    return normalizedLeft.length - normalizedRight.length;
+  }
+
+  return normalizedLeft.localeCompare(normalizedRight, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,16 +139,27 @@ export default function AdminUsersPage() {
     setCurrentPage(1);
   }, [debouncedSearch]);
 
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((left, right) => {
+      const byStudentId = compareStudentIds(left.studentId, right.studentId);
+      if (byStudentId !== 0) return byStudentId;
+
+      return left.fullName.localeCompare(right.fullName, undefined, {
+        sensitivity: "base",
+      });
+    });
+  }, [users]);
+
   const filteredUsers = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
-    if (!query) return users;
+    if (!query) return sortedUsers;
 
-    return users.filter(
+    return sortedUsers.filter(
       (user) =>
         user.fullName.toLowerCase().includes(query) ||
         user.studentId.toLowerCase().includes(query),
     );
-  }, [debouncedSearch, users]);
+  }, [debouncedSearch, sortedUsers]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -275,7 +310,7 @@ export default function AdminUsersPage() {
     setFormError("");
 
     if (!form.fullName.trim() || !form.studentId.trim()) {
-      setFormError("ກະລຸນາປ້ອນຊື່-ນາມສະກຸນ ແລະ ລະຫັດນັກສຶກສາ");
+      setFormError("ກະລຸນາປ້ອນຊື່-ນາມສະກຸນ ແລະ ລະຫັດ");
       return;
     }
 
@@ -439,7 +474,7 @@ export default function AdminUsersPage() {
         <div className="admin-page-container space-y-6">
           <PageHeader
             title="ຈັດການຜູ້ໂຫວດ"
-            subtitle="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດນັກສຶກສາ"
+            subtitle="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດ"
             actions={
               <button
                 type="button"
@@ -529,7 +564,7 @@ export default function AdminUsersPage() {
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="ຄົ້ນຫາດ້ວຍຊື່ ຫຼື ລະຫັດນັກສຶກສາ"
+                placeholder="ຄົ້ນຫາດ້ວຍຊື່ ຫຼື ລະຫັດ"
                 className="admin-input"
               />
             </div>
@@ -598,7 +633,7 @@ export default function AdminUsersPage() {
                         ຊື່-ນາມສະກຸນ
                       </th>
                       <th className="admin-table-header-cell px-4 py-3 text-left">
-                        ລະຫັດນັກສຶກສາ
+                        ລະຫັດ
                       </th>
                       <th className="admin-table-header-cell px-4 py-3 text-left">
                         ສ້າງເມື່ອ
@@ -730,7 +765,7 @@ export default function AdminUsersPage() {
         open={isModalOpen}
         onClose={resetForm}
         title={editingUser ? "ແກ້ໄຂຜູ້ໂຫວດ" : "ເພີ່ມຜູ້ໂຫວດ"}
-        description="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດນັກສຶກສາເທົ່ານັ້ນ"
+        description="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດເທົ່ານັ້ນ"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -753,7 +788,7 @@ export default function AdminUsersPage() {
 
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-              ລະຫັດນັກສຶກສາ
+              ລະຫັດ
             </label>
             <input
               type="text"

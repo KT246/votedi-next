@@ -1,11 +1,13 @@
 # Architecture
 
-## Current stack
+## Active stack
 
 ```txt
 Browser
   -> Next.js client code
-  -> Firebase Web SDK (Firestore onSnapshot)
+  -> Firebase Web SDK
+     -> direct onSnapshot for room_results hot-path realtime
+     -> Firestore event-log subscription for room status/reset/list sync
 
 Next.js API routes
   -> Firebase Admin SDK
@@ -13,21 +15,20 @@ Next.js API routes
 
 JWT auth
   -> managed by app code
-  -> stored/validated by Next.js routes
+  -> validated by Next.js routes
 ```
 
 ## Auth model
 
-App này không dùng Firebase Auth.
+The app does not use Firebase Auth.
 
-Auth hiện tại:
+Current auth flow:
 
-- Admin login qua [src/app/api/auth/login/route.ts](/d:/my-projects/vote/vote-next/src/app/api/auth/login/route.ts)
-- User login qua [src/app/api/auth/user/login/route.ts](/d:/my-projects/vote/vote-next/src/app/api/auth/user/login/route.ts)
-- JWT được ký bằng `JWT_SECRET`
-- User/admin session vẫn đi qua logic hiện có trong app
+- admin login: [src/app/api/auth/login/route.ts](/d:/my-projects/vote/vote-next/src/app/api/auth/login/route.ts)
+- user login: [src/app/api/auth/user/login/route.ts](/d:/my-projects/vote/vote-next/src/app/api/auth/user/login/route.ts)
+- JWT signing: `JWT_SECRET`
 
-Các helper chính:
+Helpers:
 
 - [src/lib/serverAuth.ts](/d:/my-projects/vote/vote-next/src/lib/serverAuth.ts)
 - [src/lib/userAuth.ts](/d:/my-projects/vote/vote-next/src/lib/userAuth.ts)
@@ -35,44 +36,63 @@ Các helper chính:
 
 ## Realtime model
 
-App không dùng WebSocket server riêng và không dùng Pusher nữa.
+There are now two realtime paths:
 
-Realtime hiện tại hoạt động như sau:
+### 1. Direct room result summary
 
-1. Server-side event được ghi vào Firestore bởi [src/lib/realtimeEmitter.ts](/d:/my-projects/vote/vote-next/src/lib/realtimeEmitter.ts)
-2. Event được ghi dưới collection:
+Used for the hot path where low latency matters:
+
+- admin room detail results summary
+- vote counts
+- result counts
+
+Source:
+
+- `room_results/{roomId}`
+- client helper: [src/lib/roomResultsRealtime.ts](/d:/my-projects/vote/vote-next/src/lib/roomResultsRealtime.ts)
+
+This path exists to avoid:
+
+- refetching heavy results rows on every vote
+- append-only event overhead for every vote
+- extra API round-trips after each vote
+
+### 2. Firestore event-log channels
+
+Still used for lighter room lifecycle events:
+
+- room status changed
+- room results reset
+- list/status sync across pages
+
+Files:
+
+- [src/lib/realtimeEmitter.ts](/d:/my-projects/vote/vote-next/src/lib/realtimeEmitter.ts)
+- [src/api/socketClient.ts](/d:/my-projects/vote/vote-next/src/api/socketClient.ts)
+- [src/hooks/useRoomSocket.ts](/d:/my-projects/vote/vote-next/src/hooks/useRoomSocket.ts)
+
+Stored under:
 
 ```txt
 realtime_channels/{channelId}/events/{eventId}
 ```
 
-3. Client subscribe bằng Firestore `onSnapshot` trong [src/api/socketClient.ts](/d:/my-projects/vote/vote-next/src/api/socketClient.ts)
-4. UI pages/hooks hiện tại vẫn giữ interface gần giống “socket” cũ để giảm thay đổi ở layer màn hình
-
-Channel naming:
-
-- room scope qua [src/lib/realtimeChannels.ts](/d:/my-projects/vote/vote-next/src/lib/realtimeChannels.ts)
-- admin rooms channel
-- owner channel
-- room channel
-
 ## Data model
 
-Collection chính:
+Main collections:
 
 - `admins`
 - `users`
 - `rooms`
+- `room_results`
 - `votes`
 - `realtime_channels`
 
 ### `admins`
 
-Một admin record chính được tạo qua:
+Single-admin setup.
 
-- [scripts/create-admin.js](/d:/my-projects/vote/vote-next/scripts/create-admin.js)
-
-Fields điển hình:
+Typical fields:
 
 - `username`
 - `password`
@@ -81,9 +101,13 @@ Fields điển hình:
 - `createdAt`
 - `updatedAt`
 
+Seeded by:
+
+- [scripts/create-admin.js](/d:/my-projects/vote/vote-next/scripts/create-admin.js)
+
 ### `users`
 
-Fields điển hình:
+Typical fields:
 
 - `fullName`
 - `studentId`
@@ -98,7 +122,7 @@ Fields điển hình:
 
 ### `rooms`
 
-Fields điển hình:
+Typical fields:
 
 - `roomCode`
 - `roomName`
@@ -117,11 +141,37 @@ Fields điển hình:
 - `createdAt`
 - `updatedAt`
 
+Important rules:
+
+- candidate editing is blocked while a room is open
+- opening a room validates `candidate count > maxSelection`
+
+### `room_results`
+
+Summary read model for fast results/realtime.
+
+Typical fields:
+
+- `roomId`
+- `status`
+- `eligibleCount`
+- `votedCount`
+- `notVotedCount`
+- `totalVotes`
+- `resultCounts`
+- `updatedAt`
+
 ### `votes`
 
-Mỗi vote hiện được lưu theo cặp `roomId + userId`.
+One vote per `roomId + userId`.
 
-Fields điển hình:
+Document identity is effectively:
+
+```txt
+{roomId}__{userId}
+```
+
+Typical fields:
 
 - `roomId`
 - `roomCode`
@@ -129,9 +179,34 @@ Fields điển hình:
 - `selectedIds`
 - `votedAt`
 
-## Important constraints
+## Results API behavior
 
-- Dữ liệu nghiệp vụ đi qua API routes, không ghi trực tiếp từ browser.
-- Firestore rules hiện chỉ mở read cho realtime events.
-- Nếu muốn đổi flow sang client-write trực tiếp, phải viết lại rules và data-access strategy.
-- Nếu muốn dùng Firebase Auth sau này, đó là thay đổi kiến trúc, không phải thay đổi nhỏ.
+Route:
+
+- [src/app/api/rooms/[roomId]/results/route.ts](/d:/my-projects/vote/vote-next/src/app/api/rooms/[roomId]/results/route.ts)
+
+Current behavior:
+
+- summary data should come from `room_results`
+- participation rows are only returned when:
+  - caller is admin
+  - query string explicitly sends `?includeRows=1`
+
+This is intentional. Do not revert it casually.
+
+## Performance notes
+
+Known good decisions in current code:
+
+- do not refetch full results rows on every vote
+- use direct `room_results` snapshot for summary counts
+- keep heavy participation/audit reads out of the hot path
+- avoid unnecessary room-login round-trips on vote submit
+- avoid rejoining room channels when only room status changes
+
+## Things not to break
+
+- do not let the client write business data directly to Firestore
+- do not reopen candidate editing while a room is open
+- do not reintroduce vote-progress event spam if `room_results` already covers the need
+- do not let non-admin callers fetch participation rows

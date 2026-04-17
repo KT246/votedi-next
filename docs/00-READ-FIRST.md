@@ -1,66 +1,75 @@
 # Read First
 
-## Bắt buộc đọc trước khi sửa code
+## Current product rules
 
-Repo này **không còn** đi theo flow cũ:
+This repo is now built around these rules:
 
-- Không dùng `MongoDB`
-- Không dùng `Pusher`
-- Không dùng `Firebase Auth`
-- Không dùng `Firebase Storage`
-- Không dùng upload ảnh lên Firebase
+- Single admin only.
+- User login uses `studentId` only.
+- In Lao UI, the user-facing label is now `ລະຫັດ`.
+- Admin manages voters with `fullName + studentId`.
+- User import is `Excel only`.
+- Candidates are `manual CRUD only`.
+- Avatars/images still accept Google Drive links or external URLs.
+- `/` is the user entry.
+- `/admin` redirects to `/admin/login`.
 
-Repo này **đang dùng**:
+## Current stack
 
 - `Next.js 16`
-- `Firestore` để lưu document
-- `Firebase Admin SDK` cho server-side API routes
-- `Firebase Web SDK` cho client-side realtime bằng `onSnapshot`
-- JWT auth tự quản trong app
-- Ảnh/avatar theo flow hiện tại lấy từ Google Drive hoặc URL ngoài
+- `Firestore` for documents
+- `Firebase Admin SDK` for server-side data access
+- `Firebase Web SDK` for client-side realtime
+- app-managed JWT auth
 
-## Những thay đổi đã làm
+Not used anymore:
 
-Đã migrate từ `MongoDB + Pusher` sang `Firestore + Firestore realtime`.
+- `MongoDB`
+- `Pusher`
+- `Firebase Auth`
+- `Firebase Storage`
+- custom WebSocket server
 
-Các file hạ tầng chính:
+## Important recent changes
 
-- [src/lib/firebaseAdmin.ts](/d:/my-projects/vote/vote-next/src/lib/firebaseAdmin.ts)
-- [src/lib/firebaseClient.ts](/d:/my-projects/vote/vote-next/src/lib/firebaseClient.ts)
-- [src/lib/firestoreData.ts](/d:/my-projects/vote/vote-next/src/lib/firestoreData.ts)
-- [src/api/socketClient.ts](/d:/my-projects/vote/vote-next/src/api/socketClient.ts)
-- [src/lib/realtimeEmitter.ts](/d:/my-projects/vote/vote-next/src/lib/realtimeEmitter.ts)
-- [scripts/create-admin.js](/d:/my-projects/vote/vote-next/scripts/create-admin.js)
+- Vote summary/count realtime was optimized.
+- Admin results now subscribe directly to `room_results/{roomId}` for the hot path.
+- Heavy participation rows are no longer fetched on every vote.
+- `GET /api/rooms/:roomId/results` only returns participation rows when admin explicitly requests `?includeRows=1`.
+- Vote submit no longer re-checks room login if the user is already checked in.
+- `listUsersByIds()` was optimized to use Firestore `getAll(...)`.
+- User room list no longer tears down and rejoins channels just because room status changed.
+- Google Drive avatar normalization now supports more URL shapes and raw file ids.
 
-Các route handlers đã được đổi sang Firestore:
+## Current verification status
 
-- `src/app/api/auth/**`
-- `src/app/api/users/**`
-- `src/app/api/rooms/**`
-- `src/app/api/admin/profile/route.ts`
-
-## Điều không được giả định sai
-
-- `authDomain` trong Firebase config **không có nghĩa** app dùng Firebase Auth.
-- `NEXT_PUBLIC_FIREBASE_*` chỉ để browser kết nối Firestore realtime.
-- `FIREBASE_*` là biến server-only để API routes truy cập Firestore.
-- Dữ liệu nghiệp vụ không nên được đọc/ghi trực tiếp từ client, trừ realtime channel events.
-
-## Trạng thái kỹ thuật hiện tại
-
-Tại thời điểm viết docs này:
+At the time of this handoff:
 
 - `npx.cmd tsc --noEmit`: pass
 - `npm.cmd run build`: pass
-- `node scripts/create-admin.js`: đã seed được admin khi Firestore/credentials hoạt động
 
-## Trước khi tiếp tục làm gì
+## Current known warnings
 
-Phải kiểm tra các file này:
+Lint still reports `@next/next/no-img-element` warnings in these files:
+
+- [src/app/admin/vote-rooms/[roomId]/page.tsx](/d:/my-projects/vote/vote-next/src/app/admin/vote-rooms/[roomId]/page.tsx)
+- [src/components/CandidateCard.tsx](/d:/my-projects/vote/vote-next/src/components/CandidateCard.tsx)
+- [src/components/ResultBoard.tsx](/d:/my-projects/vote/vote-next/src/components/ResultBoard.tsx)
+- [src/components/RoomHeader.tsx](/d:/my-projects/vote/vote-next/src/components/RoomHeader.tsx)
+- [src/pages/MyRoomsPage.tsx](/d:/my-projects/vote/vote-next/src/pages/MyRoomsPage.tsx)
+
+These are warnings only. Build and typecheck currently pass.
+
+## Before you change anything
+
+Check these files first:
 
 - [.env](/d:/my-projects/vote/vote-next/.env)
+- [firebase.json](/d:/my-projects/vote/vote-next/firebase.json)
 - [firestore.rules](/d:/my-projects/vote/vote-next/firestore.rules)
 - [firestore.indexes.json](/d:/my-projects/vote/vote-next/firestore.indexes.json)
-- [firebase.json](/d:/my-projects/vote/vote-next/firebase.json)
 
-Nếu định refactor data layer hoặc realtime, phải đọc tiếp [01-ARCHITECTURE.md](/d:/my-projects/vote/vote-next/docs/01-ARCHITECTURE.md).
+Then read:
+
+- [01-ARCHITECTURE.md](/d:/my-projects/vote/vote-next/docs/01-ARCHITECTURE.md)
+- [02-SETUP-AND-OPS.md](/d:/my-projects/vote/vote-next/docs/02-SETUP-AND-OPS.md)

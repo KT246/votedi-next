@@ -83,6 +83,14 @@ export default function MyRoomsPage() {
     const reloadTimerRef = useRef<number | null>(null);
     const prefetchedRoomsRef = useRef(new Set<string>());
     const debouncedSearch = useDebouncedValue(search, 1000);
+    const roomIds = useMemo(
+        () => Array.from(new Set(rooms.map((room) => normalizeRoomId(room.id)).filter(Boolean))),
+        [rooms],
+    );
+    const roomIdsKey = useMemo(() => roomIds.join('|'), [roomIds]);
+    const ownerScopeId =
+        normalizeRoomId(user?.createdByAdminId) ||
+        normalizeRoomId((rooms[0] as { ownerAdminId?: unknown } | undefined)?.ownerAdminId);
 
     const fetchMyRooms = useCallback(async () => {
         setLoading(true);
@@ -123,10 +131,7 @@ export default function MyRoomsPage() {
     }, []);
 
     useEffect(() => {
-        const roomIds = Array.from(new Set(rooms.map((room) => normalizeRoomId(room.id)).filter(Boolean)));
-        const ownerScopeId =
-            normalizeRoomId(user?.createdByAdminId) ||
-            normalizeRoomId((rooms[0] as { ownerAdminId?: unknown } | undefined)?.ownerAdminId);
+        const roomIds = roomIdsKey ? roomIdsKey.split('|').filter(Boolean) : [];
         const ownerScopeChannel = ownerScopeId ? `owner:${ownerScopeId}` : '';
         if (roomIds.length === 0 && !ownerScopeId) return;
 
@@ -196,7 +201,7 @@ export default function MyRoomsPage() {
             }
             releaseSocket();
         };
-    }, [rooms, fetchMyRooms, user?.createdByAdminId]);
+    }, [fetchMyRooms, ownerScopeId, roomIdsKey]);
 
     useEffect(() => {
         return () => {

@@ -40,5 +40,8 @@ export const roomsApi = {
         apiClient.delete(`/rooms/${roomId}/users/${userId}`),
 
     // Results
-    getResults: (roomId: string) => apiClient.get(`/rooms/${roomId}/results`),
+    getResults: (roomId: string, options?: { includeRows?: boolean }) =>
+        apiClient.get(`/rooms/${roomId}/results`, {
+            params: options?.includeRows ? { includeRows: '1' } : undefined,
+        }),
 };

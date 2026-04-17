@@ -449,9 +449,10 @@ export async function deleteUser(userId: string) {
 
 export async function listUsersByIds(userIds: string[]) {
   const uniqueIds = Array.from(new Set(userIds.map((id) => normalizeString(id)).filter(Boolean)));
-  const snapshots = await Promise.all(
-    uniqueIds.map((userId) => usersCollection().doc(userId).get()),
-  );
+  if (uniqueIds.length === 0) return [];
+
+  const refs = uniqueIds.map((userId) => usersCollection().doc(userId));
+  const snapshots = await db().getAll(...refs);
   return snapshots
     .filter((snapshot) => snapshot.exists)
     .map((snapshot) => toUserRecord(snapshot as QueryDocumentSnapshot));

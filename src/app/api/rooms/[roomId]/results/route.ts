@@ -28,7 +28,7 @@ export async function GET(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
   const includeRows =
-    auth.payload.role === "admin" ||
+    auth.payload.role === "admin" &&
     request.nextUrl.searchParams.get("includeRows") === "1";
 
   const { roomId } = await params;

@@ -15,7 +15,6 @@ import { toRealtimeChannelName } from "@/lib/realtimeChannels";
 const SUPPORTED_EVENTS = [
   "room:status-changed",
   "rooms:status-changed",
-  "room:progress-updated",
   "room:results-reset",
 ] as const;
 

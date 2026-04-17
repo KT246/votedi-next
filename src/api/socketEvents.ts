@@ -4,16 +4,6 @@ export interface RoomStatusChangedPayload {
     ownerAdminId?: string;
 }
 
-export interface RoomProgressUpdatedPayload {
-    roomId: string;
-    totalVotes: number;
-    totalVoters: number;
-    votedUsers: number;
-    pendingUsers: number;
-    lastVoterId?: string;
-    ownerAdminId?: string;
-}
-
 export interface RoomResultsResetPayload {
     roomId: string;
     ownerAdminId?: string;

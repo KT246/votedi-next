@@ -2,7 +2,7 @@
 
 ## Required environment variables
 
-Đọc từ [.env.example](/d:/my-projects/vote/vote-next/.env.example).
+Read [.env.example](/d:/my-projects/vote/vote-next/.env.example).
 
 ### Server-side Firebase Admin SDK
 
@@ -10,14 +10,14 @@
 - `FIREBASE_CLIENT_EMAIL`
 - `FIREBASE_PRIVATE_KEY`
 
-Nguồn lấy:
+Source:
 
 - Firebase Console
 - Project settings
 - Service accounts
 - Generate new private key
 
-Map từ service account JSON:
+Map from service-account JSON:
 
 - `project_id` -> `FIREBASE_PROJECT_ID`
 - `client_email` -> `FIREBASE_CLIENT_EMAIL`
@@ -25,83 +25,61 @@ Map từ service account JSON:
 
 ### Client-side Firebase config
 
+Required for current Firestore client usage:
+
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
 - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
 - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 
-Nguồn lấy:
+Optional for this app's current flow:
 
-- Firebase Console
-- Project settings
-- General
-- Your apps
-- Chọn web app
-
-Map từ `firebaseConfig`:
-
-- `apiKey` -> `NEXT_PUBLIC_FIREBASE_API_KEY`
-- `authDomain` -> `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `projectId` -> `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-- `appId` -> `NEXT_PUBLIC_FIREBASE_APP_ID`
+- storage/messaging values are not required unless you later add those features
 
 ## Firestore setup
 
-Nếu trong Firebase Console chưa thấy tab `Data`, nghĩa là project chưa tạo Firestore database.
+If the Firebase Console still shows `Create database`, Firestore has not been created yet.
 
-Bước tạo:
+Create it first:
 
 1. Firebase Console
 2. Project `votedi`
 3. Firestore Database
 4. `Create database`
-5. Chọn region
-
-Sau khi Firestore có rồi, mới xem được data và mới seed được document.
+5. choose region
 
 ## Firestore rules and indexes
 
-Repo dùng:
+Repo files:
 
+- [firebase.json](/d:/my-projects/vote/vote-next/firebase.json)
 - [firestore.rules](/d:/my-projects/vote/vote-next/firestore.rules)
 - [firestore.indexes.json](/d:/my-projects/vote/vote-next/firestore.indexes.json)
-- [firebase.json](/d:/my-projects/vote/vote-next/firebase.json)
 
-Deploy bằng Firebase CLI:
-
-```bash
-firebase deploy --only firestore:rules,firestore:indexes
-```
-
-Nếu máy chưa có CLI:
+Recommended deploy command:
 
 ```bash
-npm install -g firebase-tools
-firebase login
-firebase deploy --only firestore:rules,firestore:indexes
+npx firebase-tools deploy --project votedi --only firestore:rules,firestore:indexes
 ```
 
-Hoặc dùng `npx`:
+If you want a persistent active project:
 
 ```bash
-npx firebase-tools login
-npx firebase-tools deploy --only firestore:rules,firestore:indexes
+npx firebase-tools use --add
 ```
 
-## Seed admin
-
-Script:
+## Seed the admin account
 
 ```bash
 node scripts/create-admin.js
 ```
 
-Script này:
+This script:
 
-- load `.env`
-- kết nối Firestore qua Firebase Admin SDK
-- xóa các admin cũ
-- tạo đúng 1 admin mới
+- loads `.env`
+- connects with Firebase Admin SDK
+- replaces old admins
+- creates exactly one admin
 
 Default values:
 
@@ -109,9 +87,7 @@ Default values:
 - `ADMIN_PASSWORD=admin123`
 - `ADMIN_FULL_NAME=Administrator`
 
-## Local verification checklist
-
-Sau khi setup xong:
+## Local verification
 
 ```bash
 npm install
@@ -120,18 +96,48 @@ npm.cmd run build
 npm run dev
 ```
 
-Kiểm tra trong Firebase Console:
+Check Firebase Console:
 
-- `admins` có document sau khi seed admin
-- `users` có document sau khi tạo/import user
-- `rooms` có document sau khi tạo phòng
-- `votes` có document sau khi submit vote
-- `realtime_channels` có event documents khi có thay đổi realtime
+- `admins` after seeding admin
+- `users` after create/import
+- `rooms` after room creation
+- `votes` after voting
+- `room_results` after results activity
+- `realtime_channels` for room lifecycle events
 
-## Known operational notes
+## Current warnings
 
-- `firebase-tools` phải cài riêng, không nằm sẵn trong repo.
-- Nếu `create-admin.js` báo thiếu config, kiểm tra lại `.env`.
-- Nếu `create-admin.js` báo lỗi mạng/kết nối, thường là máy hiện tại không ra được Firestore endpoint.
-- Không commit service account JSON vào repo.
-- Không paste private key thật vào docs hoặc chat logs công khai.
+Known current warnings are limited to `@next/next/no-img-element` on a few UI files. They do not block build or typecheck.
+
+## Troubleshooting
+
+### Firebase CLI says no active project
+
+Use:
+
+```bash
+npx firebase-tools deploy --project votedi --only firestore:rules,firestore:indexes
+```
+
+### `tsc` fails on `.next/types/validator.ts` with missing `routes.js`
+
+This was seen once as generated-cache drift. If it happens again:
+
+1. rerun `npm.cmd run build`
+2. rerun `npx.cmd tsc --noEmit`
+3. if still needed, remove `.next` and rebuild
+
+### Realtime feels slow
+
+Check these assumptions before changing architecture:
+
+- results summary should come from `room_results`
+- heavy rows should not be fetched on every vote
+- vote submit should not re-check room login when the user is already checked in
+
+## Operational reminders
+
+- do not commit service-account JSON into the repo
+- do not paste the private key into docs
+- user import is Excel-only
+- candidate import should not be reintroduced

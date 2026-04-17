@@ -134,11 +134,12 @@ export default function VoteRoomPage() {
       throw new Error("ຂໍ້ມູນຫ້ອງ ຫຼື ຜູ້ໃຊ້ບໍ່ຄົບ");
     }
 
-    // Ensure voter is checked into room before submitting vote.
-    // This is idempotent and prevents backend rejection on stricter check-in policies.
-    await apiClient.post("/auth/user/room-login", {
-      roomCode: roomInfo.roomCode,
-    });
+    if (checkedInRoomCode !== roomInfo.roomCode) {
+      await apiClient.post("/auth/user/room-login", {
+        roomCode: roomInfo.roomCode,
+      });
+      setCheckedInRoomCode(roomInfo.roomCode);
+    }
 
     await apiClient.post(`/rooms/${roomInfo.id}/vote`, {
       userId: user.id,

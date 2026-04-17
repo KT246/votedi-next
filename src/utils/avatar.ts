@@ -1,10 +1,32 @@
 import type { SyntheticEvent } from 'react';
 
+const DRIVE_FILE_ID_PATTERN = /^[a-zA-Z0-9_-]{10,}$/;
+
+function isGoogleDriveHost(host: string): boolean {
+    const normalizedHost = host.toLowerCase();
+    return (
+        normalizedHost.includes('drive.google.com') ||
+        normalizedHost.includes('drive.usercontent.google.com') ||
+        normalizedHost.includes('docs.google.com') ||
+        normalizedHost.includes('docs.googleusercontent.com') ||
+        normalizedHost.includes('googleusercontent.com')
+    );
+}
+
 function extractDriveFileId(input: string): string | null {
+    const normalizedInput = String(input || '').trim();
+    if (!normalizedInput) {
+        return null;
+    }
+
+    if (!normalizedInput.includes('://') && DRIVE_FILE_ID_PATTERN.test(normalizedInput)) {
+        return normalizedInput;
+    }
+
     try {
-        const url = new URL(input);
+        const url = new URL(normalizedInput);
         const host = url.hostname.toLowerCase();
-        if (!host.includes('drive.google.com')) {
+        if (!isGoogleDriveHost(host)) {
             return null;
         }
 
@@ -22,7 +44,10 @@ function extractDriveFileId(input: string): string | null {
         // Keep fallback regex below for non-standard URLs.
     }
 
-    const match = input.match(/\/d\/([a-zA-Z0-9_-]+)/) || input.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const match =
+        normalizedInput.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+        normalizedInput.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+        normalizedInput.match(/\/thumbnail\/?[^?]*[?&]id=([a-zA-Z0-9_-]+)/);
     return match?.[1] || null;
 }
 
