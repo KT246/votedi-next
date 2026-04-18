@@ -474,7 +474,6 @@ export default function AdminUsersPage() {
         <div className="admin-page-container space-y-6">
           <PageHeader
             title="ຈັດການຜູ້ໂຫວດ"
-            subtitle="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດ"
             actions={
               <button
                 type="button"
@@ -492,9 +491,6 @@ export default function AdminUsersPage() {
               <div>
                 <p className="text-sm font-semibold text-[var(--admin-text)]">
                   ນຳເຂົ້າຈາກ Excel
-                </p>
-                <p className="text-xs text-[var(--admin-text-muted)]">
-                  ຄໍລຳທີ່ຮອງຮັບ: `fullName`, `studentId`
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -610,7 +606,6 @@ export default function AdminUsersPage() {
               <div className="p-4">
                 <EmptyState
                   title="ຍັງບໍ່ມີຜູ້ໂຫວດ"
-                  description="ເພີ່ມຜູ້ໂຫວດເອງ ຫຼື ນຳເຂົ້າຈາກ Excel"
                 />
               </div>
             ) : null}
@@ -765,7 +760,6 @@ export default function AdminUsersPage() {
         open={isModalOpen}
         onClose={resetForm}
         title={editingUser ? "ແກ້ໄຂຜູ້ໂຫວດ" : "ເພີ່ມຜູ້ໂຫວດ"}
-        description="ຂໍ້ມູນຜູ້ໂຫວດໃຊ້ຊື່-ນາມສະກຸນ ແລະ ລະຫັດເທົ່ານັ້ນ"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

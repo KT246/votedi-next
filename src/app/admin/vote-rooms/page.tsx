@@ -305,7 +305,6 @@ export default function AdminVoteRoomsPage() {
         <div className="admin-page-container space-y-6">
           <PageHeader
             title="ຫ້ອງໂຫວດ"
-            subtitle="ສ້າງ, ຕິດຕາມ ແລະ ຈັດການສະຖານະຫ້ອງໃນບ່ອນດຽວ"
             actions={
               <Link href="/admin/vote-rooms/create" className="admin-btn-primary">
                 ສ້າງຫ້ອງ
@@ -376,11 +375,6 @@ export default function AdminVoteRoomsPage() {
           {!loading && !error && filteredRooms.length === 0 ? (
             <EmptyState
               title="ບໍ່ພົບຫ້ອງ"
-              description={
-                search || statusFilter !== "all"
-                  ? "ລອງປັບຕົວກອງໃໝ່"
-                  : "ສ້າງຫ້ອງທຳອິດເພື່ອເລີ່ມຈັດການການໂຫວດ"
-              }
               action={
                 <Link href="/admin/vote-rooms/create" className="admin-btn-primary">
                   ສ້າງຫ້ອງ

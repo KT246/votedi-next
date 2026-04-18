@@ -205,7 +205,6 @@ export default function AdminDashboardPage() {
         <div className="admin-page-container space-y-6">
           <PageHeader
             title="ພາບລວມລະບົບ"
-            subtitle="ສະຫຼຸບສະຖານະຫ້ອງໂຫວດແບບໃກ້ realtime ຜ່ານ Firestore"
             actions={
               <Link href="/admin/vote-rooms/create" className="admin-btn-primary">
                 ສ້າງຫ້ອງ
@@ -246,16 +245,13 @@ export default function AdminDashboardPage() {
                 })}
               </div>
 
-              <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
+              <div className="grid gap-6">
                 <div className="admin-table-shell">
                   <div className="flex items-center justify-between border-b border-[var(--admin-border)] px-6 py-4">
                     <div>
                       <h2 className="text-lg font-semibold text-[var(--admin-text)]">
                         ຫ້ອງຫຼ້າສຸດ
                       </h2>
-                      <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
-                        ອັບເດດຫ້ອງລ່າສຸດ ແລະ ສະຖານະປັດຈຸບັນ
-                      </p>
                     </div>
                     <Link href="/admin/vote-rooms" className="admin-btn-secondary">
                       ເບິ່ງທັງໝົດ
@@ -294,9 +290,11 @@ export default function AdminDashboardPage() {
                               <p className="font-medium text-[var(--admin-text)]">
                                 {room.roomName || "-"}
                               </p>
-                              <p className="mt-1 line-clamp-1 text-sm text-[var(--admin-text-muted)]">
-                                {room.description || "ບໍ່ມີຄຳອະທິບາຍ"}
-                              </p>
+                              {room.description ? (
+                                <p className="mt-1 line-clamp-1 text-sm text-[var(--admin-text-muted)]">
+                                  {room.description}
+                                </p>
+                              ) : null}
                             </td>
                             <td className="px-6 py-4 font-mono text-sm text-[var(--admin-text-muted)]">
                               {room.roomCode || "-"}
@@ -320,26 +318,6 @@ export default function AdminDashboardPage() {
                       </tbody>
                     </table>
                   )}
-                </div>
-
-                <div className="admin-card p-6">
-                  <h2 className="text-lg font-semibold text-[var(--admin-text)]">
-                    ບັນທຶກການໃຊ້ງານ
-                  </h2>
-                  <div className="mt-5 space-y-3 text-sm leading-6 text-[var(--admin-text-muted)]">
-                    <div className="admin-card-muted px-4 py-4">
-                      ລະບົບແອັດມິນລັອກອິນພາຍໃນແອັບ ແລະໃຊ້ Firebase
-                      ສຳລັບ Firestore ກັບ realtime ເທົ່ານັ້ນ
-                    </div>
-                    <div className="admin-card-muted px-4 py-4">
-                      ຜູ້ໃຊ້ຖືກຈັດການດ້ວຍ `fullName + studentId`
-                      ແຕ່ຝັ່ງລັອກອິນຍັງໃຊ້ `studentId` ເທົ່ານັ້ນ
-                    </div>
-                    <div className="admin-card-muted px-4 py-4">
-                      ການປ່ຽນສະຖານະຫ້ອງຈະຖືກອັບເດດຜ່ານ realtime event
-                      ຂອງ Firestore
-                    </div>
-                  </div>
                 </div>
               </div>
             </>

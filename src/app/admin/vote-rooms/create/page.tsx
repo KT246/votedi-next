@@ -63,7 +63,6 @@ export default function AdminVoteRoomCreateRoute() {
         <div className="admin-page-container max-w-4xl space-y-6">
           <PageHeader
             title="ສ້າງຫ້ອງໂຫວດ"
-            subtitle="ເລີ່ມຈາກຫ້ອງຮ່າງ ແລ້ວຄ່ອຍເພີ່ມຜູ້ສະໝັກໃນໜ້າລາຍລະອຽດ"
             actions={
               <Link href="/admin/vote-rooms" className="admin-btn-secondary">
                 ກັບໄປລາຍການຫ້ອງ
@@ -92,9 +91,6 @@ export default function AdminVoteRoomCreateRoute() {
               <h2 className="text-lg font-semibold text-[var(--admin-text)]">
                 ຕັ້ງຄ່າຫ້ອງ
               </h2>
-              <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
-                ໃສ່ຂໍ້ມູນພື້ນຖານກ່ອນ ແລ້ວຈັດການຜູ້ສະໝັກ ແລະ ຜົນໃນໜ້າລາຍລະອຽດ
-              </p>
             </div>
 
             <div className="space-y-5 px-6 py-6">
@@ -153,15 +149,10 @@ export default function AdminVoteRoomCreateRoute() {
                     className="admin-input"
                     placeholder="60"
                   />
-                  <p className="mt-2 text-xs text-[var(--admin-text-muted)]">
-                    ຫ້ອງຈະໃຊ້ໂໝດກຳນົດເວລາແບບນາທີໃນຂັ້ນຕົ້ນ
-                  </p>
                 </div>
                 <div className="admin-card-muted px-4 py-3 md:col-span-2">
                   <p className="text-sm font-medium text-slate-700">ປະເພດການໂຫວດ</p>
-                  <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
-                    ຫ້ອງໂຫວດເລືອກໄດ້ຫຼາຍຄົນ
-                  </p>
+                  <p className="mt-1 text-sm text-[var(--admin-text)]">ເລືອກໄດ້ຫຼາຍຄົນ</p>
                 </div>
               </div>
 

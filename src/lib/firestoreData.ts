@@ -877,39 +877,36 @@ export async function submitVote(payload: {
       } satisfies SubmitVoteResult;
     }
 
+    if (voteSnapshot.exists) {
+      return {
+        ok: false,
+        code: "ALREADY_VOTED",
+        message: "User already voted in this room",
+        status: 409,
+        room,
+        vote: toVoteRecord(voteSnapshot as QueryDocumentSnapshot),
+        results: resultsSnapshot.exists
+          ? toRoomResultsRecord(resultsSnapshot)
+          : undefined,
+      } satisfies SubmitVoteResult;
+    }
+
     const existingResults = resultsSnapshot.exists
       ? toRoomResultsRecord(resultsSnapshot)
       : null;
-    const existingVote = voteSnapshot.exists
-      ? toVoteRecord(voteSnapshot as QueryDocumentSnapshot)
-      : null;
     const nextCounts = { ...(existingResults?.resultCounts || {}) };
-
-    for (const selectedId of existingVote?.selectedIds || []) {
-      const currentCount = Number(nextCounts[selectedId] || 0);
-      if (currentCount <= 1) {
-        delete nextCounts[selectedId];
-        continue;
-      }
-      nextCounts[selectedId] = currentCount - 1;
-    }
-
     for (const selectedId of selectedIds) {
       nextCounts[selectedId] = (nextCounts[selectedId] || 0) + 1;
     }
 
     const eligibleCount = countEligibleUsers(room);
-    const votedCount = existingVote
-      ? Math.max(existingResults?.votedCount || 0, 1)
-      : (existingResults?.votedCount || 0) + 1;
+    const votedCount = (existingResults?.votedCount || 0) + 1;
     const nextResults: RoomResultsRecord = {
       id: resultsRef.id,
       roomId: room.id,
       status: room.status,
       resultCounts: nextCounts,
-      totalVotes: existingVote
-        ? Math.max(existingResults?.totalVotes || 0, 1)
-        : (existingResults?.totalVotes || 0) + 1,
+      totalVotes: (existingResults?.totalVotes || 0) + 1,
       eligibleCount,
       votedCount,
       notVotedCount: Math.max(eligibleCount - votedCount, 0),
@@ -926,7 +923,7 @@ export async function submitVote(payload: {
       votedAt: now,
     };
 
-    transaction.set(voteRef, {
+    transaction.create(voteRef, {
       roomId: vote.roomId,
       roomCode: vote.roomCode,
       userId: vote.userId,

@@ -334,14 +334,6 @@ export default function VoteRoomPage() {
     setSubmitError("");
   }
 
-  function handleEditVote() {
-    if (!voteRecord || roomInfo?.status !== "open") return;
-    setSelectedIds(voteRecord.selectedIds || []);
-    saveVoteRecord(null);
-    setShowConfirm(false);
-    setSubmitError("");
-  }
-
   function handleOpenConfirm() {
     const requiredSelectionCount = getRequiredSelectionCount(roomInfo);
     if (selectedIds.length !== requiredSelectionCount) {
@@ -397,7 +389,6 @@ export default function VoteRoomPage() {
             voteRecord={voteRecord}
             allowResultView={roomInfo.status === "closed"}
             onViewResult={() => router.push(`/vote-room/${roomCode}/result`)}
-            onEditVote={roomInfo.status === "open" ? handleEditVote : undefined}
           />
         </div>
       </div>

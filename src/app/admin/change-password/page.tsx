@@ -70,17 +70,7 @@ export default function AdminChangePasswordPage() {
   return (
     <div className="admin-page">
       <div className="admin-page-container max-w-3xl">
-        <PageHeader
-          title="ປ່ຽນລະຫັດຜ່ານ"
-          subtitle={
-            <>
-              ບັນຊີ:{" "}
-              <span className="font-mono text-[var(--admin-text)]">
-                {adminUser?.username || "-"}
-              </span>
-            </>
-          }
-        />
+        <PageHeader title="ປ່ຽນລະຫັດຜ່ານ" />
 
         <div className="admin-card overflow-hidden">
           <div className="border-b border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-6 py-5">
@@ -88,14 +78,9 @@ export default function AdminChangePasswordPage() {
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]">
                 <KeyRound className="h-5 w-5" />
               </div>
-              <div>
-                <p className="text-sm font-semibold text-[var(--admin-text)]">
-                  ອັບເດດຂໍ້ມູນບັນຊີແອັດມິນ
-                </p>
-                <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
-                  ການປ່ຽນລະຫັດຜ່ານຈັດການຜ່ານ API ຂອງແອັບ ບໍ່ໄດ້ໃຊ້ Firebase Auth
-                </p>
-              </div>
+              <p className="text-sm font-semibold text-[var(--admin-text)]">
+                {adminUser?.username || "admin"}
+              </p>
             </div>
           </div>
 

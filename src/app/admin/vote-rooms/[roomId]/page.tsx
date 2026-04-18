@@ -914,9 +914,6 @@ export default function AdminVoteRoomDetailPage() {
               <h1 className="mt-3 text-3xl font-bold text-slate-900">
                 {room.roomName || "ລາຍລະອຽດຫ້ອງ"}
               </h1>
-              <p className="mt-1 text-slate-500">
-                ແກ້ໄຂຂໍ້ມູນຫ້ອງ, ຈັດການຜູ້ສະໝັກ ແລະ ເບິ່ງຜົນໄດ້ຈາກໜ້ານີ້
-              </p>
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge
@@ -983,9 +980,6 @@ export default function AdminVoteRoomDetailPage() {
                   <h2 className="text-lg font-semibold text-[var(--admin-text)]">
                     ພື້ນທີ່ຈັດການຫ້ອງ
                   </h2>
-                  <p className="mt-1 text-sm text-[var(--admin-text-muted)]">
-                    ຈັດການຫ້ອງ, ລາຍຊື່ຜູ້ສະໝັກ ແລະ ຜົນໃນໜ້າດຽວ
-                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -1268,7 +1262,6 @@ export default function AdminVoteRoomDetailPage() {
                     {candidateDrafts.length === 0 ? (
                       <EmptyState
                         title="ຍັງບໍ່ມີຜູ້ສະໝັກ"
-                        description="ເພີ່ມຜູ້ສະໝັກດ້ວຍມືໄດ້ຈາກໜ້ານີ້."
                       />
                     ) : (
                       <div className="admin-table-shell overflow-x-auto">
@@ -1416,7 +1409,6 @@ export default function AdminVoteRoomDetailPage() {
                     ) : mergedResults.length === 0 ? (
                       <EmptyState
                         title="ຍັງບໍ່ມີຜົນຄະແນນ"
-                        description="ຫາກມີຄົນໂຫວດແລ້ວ ຜົນຈະຂຶ້ນໃນໜ້ານີ້."
                       />
                     ) : (
                       <div className="space-y-4">
@@ -1479,9 +1471,6 @@ export default function AdminVoteRoomDetailPage() {
                             <div className="border-b border-slate-200 px-4 py-3">
                               <p className="text-sm font-semibold text-slate-900">
                                 ສະຖານະຜູ້ມີສິດທິໂຫວດ
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                ແອັດມິນຈະເຫັນວ່າໃຜໂຫວດແລ້ວ ແລະໃຜຍັງບໍ່ໄດ້ໂຫວດ
                               </p>
                             </div>
                             <div className="overflow-x-auto">
@@ -1552,7 +1541,6 @@ export default function AdminVoteRoomDetailPage() {
         open={candidateFormOpen}
         onClose={closeCandidateForm}
         title={candidateEditingIndex === null ? "ເພີ່ມຜູ້ສະໝັກ" : "ແກ້ໄຂຜູ້ສະໝັກ"}
-        description="ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ ແລ້ວຄ່ອຍກົດບັນທຶກ"
         maxWidthClass="max-w-lg"
         footer={
           <div className="flex gap-2">
@@ -1669,9 +1657,6 @@ export default function AdminVoteRoomDetailPage() {
               className="admin-textarea"
               placeholder="ຈຸດເດັ່ນ 1; ຈຸດເດັ່ນ 2"
             />
-            <p className="mt-1 text-xs text-slate-500">
-              ແຍກແຕ່ລະຂໍ້ດ້ວຍ `;` ຫຼື ຂຶ້ນແຖວໃໝ່
-            </p>
           </div>
 
           {candidateFormError ? (
@@ -1695,7 +1680,6 @@ export default function AdminVoteRoomDetailPage() {
         open={qrModalOpen}
         onClose={() => setQrModalOpen(false)}
         title="QR ຫ້ອງ"
-        description="ສະແກນ QR code ນີ້ເພື່ອເຂົ້າຫ້ອງໂຫວດໄດ້ທັນທີ"
         maxWidthClass="max-w-lg"
       >
         <div className="space-y-4">

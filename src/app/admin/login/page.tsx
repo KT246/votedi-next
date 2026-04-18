@@ -70,7 +70,7 @@ export default function AdminLoginPage() {
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="hidden lg:block">
           <div className="admin-card overflow-hidden">
-            <div className="border-b border-[var(--admin-border)] bg-[var(--admin-surface-muted)] px-8 py-6">
+            <div className="px-8 py-8">
               <div className="flex items-center gap-4">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--admin-accent-soft)] text-[var(--admin-accent)]">
                   <ShieldCheck className="h-7 w-7" />
@@ -82,38 +82,6 @@ export default function AdminLoginPage() {
                   <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--admin-text)]">
                     ສູນຈັດການແອັດມິນ
                   </h1>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-6 px-8 py-8">
-              <p className="max-w-xl text-base leading-7 text-[var(--admin-text-muted)]">
-                ໜ້າຈັດການທີ່ເປັນລະບຽບ ສຳລັບຂໍ້ມູນຜູ້ໂຫວດ, ການຕັ້ງຄ່າຫ້ອງ
-                ແລະ ການຕິດຕາມຜົນແບບ realtime
-              </p>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="admin-card-muted px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--admin-text-muted)]">
-                    ຜູ້ໂຫວດ
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--admin-text)]">
-                    ຈັດການ `fullName + studentId`
-                  </p>
-                </div>
-                <div className="admin-card-muted px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--admin-text-muted)]">
-                    ຫ້ອງ
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--admin-text)]">
-                    ຮ່າງ, ເປີດ, ປິດ ແລະ ກວດສອບ
-                  </p>
-                </div>
-                <div className="admin-card-muted px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--admin-text-muted)]">
-                    Realtime
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--admin-text)]">
-                    ອັບເດດຜ່ານ Firestore snapshot
-                  </p>
                 </div>
               </div>
             </div>
@@ -129,9 +97,6 @@ export default function AdminLoginPage() {
               <h2 className="mt-5 text-2xl font-bold tracking-tight text-[var(--admin-text)]">
                 ເຂົ້າລະບົບແອັດມິນ
               </h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--admin-text-muted)]">
-                ໃຊ້ບັນຊີແອັດມິນຂອງລະບົບ. ແອັບນີ້ບໍ່ໄດ້ໃຊ້ Firebase Auth
-              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">

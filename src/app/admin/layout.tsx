@@ -21,19 +21,16 @@ const navItems = [
   {
     href: "/admin/dashboard",
     label: "ພາບລວມ",
-    description: "ພາບລວມລະບົບ",
     icon: ChartColumnBig,
   },
   {
     href: "/admin/users",
     label: "ຜູ້ມີສິດິໂຫວດ",
-    description: "ຈັດການຂໍ້ມູນຜູ້ໃຊ້",
     icon: Users,
   },
   {
     href: "/admin/vote-rooms",
     label: "ຫ້ອງໂຫວດ",
-    description: "ສ້າງ ແລະ ຕິດຕາມຫ້ອງ",
     icon: Vote,
   },
 ];
@@ -92,9 +89,6 @@ export default function AdminLayout({
                   <p className="truncate text-sm font-semibold text-[var(--admin-sidebar-text)]">
                     VoteDI ຝັ່ງແອັດມິນ
                   </p>
-                  <p className="mt-1 text-xs text-[var(--admin-sidebar-muted)]">
-                    ຈັດການຂໍ້ມູນຜ່ານ Firestore
-                  </p>
                 </div>
               </div>
             </div>
@@ -115,12 +109,7 @@ export default function AdminLayout({
                   className={`admin-sidebar-link ${isActive ? "admin-sidebar-link-active" : ""}`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{item.label}</span>
-                    <span className="mt-0.5 block truncate text-xs text-inherit/80">
-                      {item.description}
-                    </span>
-                  </span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   <ChevronRight className="h-4 w-4 shrink-0 opacity-60" />
                 </Link>
               );
@@ -128,14 +117,8 @@ export default function AdminLayout({
           </nav>
 
           <div className="mt-auto rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-[var(--admin-sidebar-muted)]">
-              ກຳລັງໃຊ້ງານ
-            </p>
-            <p className="mt-3 text-sm font-semibold text-[var(--admin-sidebar-text)]">
+            <p className="text-sm font-semibold text-[var(--admin-sidebar-text)]">
               {adminUser?.fullName || adminUser?.username || "ແອັດມິນ"}
-            </p>
-            <p className="mt-1 text-xs text-[var(--admin-sidebar-muted)]">
-              {adminUser?.role || "admin"}
             </p>
           </div>
         </div>
@@ -145,8 +128,8 @@ export default function AdminLayout({
         <header className="sticky top-0 z-30 border-b border-[var(--admin-border)] bg-white/90 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
             <div className="min-w-0">
-              <p className="truncate text-sm text-[var(--admin-text)]">
-                ຈັດການຫ້ອງ, ຜູ້ໃຊ້ ແລະ ຜົນໂຫວດໃນບ່ອນດຽວ
+              <p className="truncate text-sm font-semibold text-[var(--admin-text)]">
+                VoteDI Admin
               </p>
             </div>
 

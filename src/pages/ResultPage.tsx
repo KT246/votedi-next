@@ -1,24 +1,22 @@
 "use client";
+
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { useVoteRoomStore } from "../store/voteRoomStore";
+import { useParams, useRouter } from "next/navigation";
+
 import apiClient from "../api/apiClient";
-import {
-  Candidate,
-  VoteParticipationRow,
-  VoteResult,
-} from "../types";
-import RoomHeader from "../components/RoomHeader";
-import ResultBoard from "../components/ResultBoard";
-import ParticipationStatusCard from "../components/ParticipationStatusCard";
 import ImagePreviewModal from "../components/ImagePreviewModal";
-import NotFoundPage from "./NotFoundPage";
-import { toDisplayAvatarUrl } from "../utils/avatar";
-import LoadingState from "../components/ui/LoadingState";
+import ParticipationStatusCard from "../components/ParticipationStatusCard";
+import ResultBoard from "../components/ResultBoard";
+import RoomHeader from "../components/RoomHeader";
 import EmptyState from "../components/ui/EmptyState";
 import ErrorState from "../components/ui/ErrorState";
+import LoadingState from "../components/ui/LoadingState";
 import { useRoomSocket } from "../hooks/useRoomSocket";
 import { formatLaoDateTime } from "../lib/formatLaoDate";
+import { useVoteRoomStore } from "../store/voteRoomStore";
+import type { Candidate, VoteParticipationRow, VoteResult } from "../types";
+import { toDisplayAvatarUrl } from "../utils/avatar";
+import NotFoundPage from "./NotFoundPage";
 
 function normalizeId(raw: unknown): string {
   if (!raw) return "";
@@ -49,6 +47,7 @@ function normalizeStatus(raw: unknown): string {
 export default function ResultPage() {
   const params = useParams<{ roomCode?: string }>() || {};
   const roomCode = String(params.roomCode || "").trim();
+  const router = useRouter();
   const { roomInfo, roomLoading, roomNotFound, loadRoom, voteRecord } =
     useVoteRoomStore();
   const roomKey = normalizeId(roomInfo?.id || roomInfo?.roomCode);
@@ -73,11 +72,14 @@ export default function ResultPage() {
     }
   }, [roomCode, loadRoom]);
 
+  useEffect(() => {
+    if (!roomCode || !roomInfo || roomInfo.status === "closed") return;
+    router.replace(`/vote-room/${roomCode}`);
+  }, [roomCode, roomInfo, router]);
+
   const fetchResults = useCallback(async (targetRoomId: string) => {
     const roomId = String(targetRoomId || "").trim();
-    if (!roomId) {
-      return;
-    }
+    if (!roomId) return;
 
     setResultsLoading(true);
     setResultsError("");
@@ -94,16 +96,18 @@ export default function ResultPage() {
       };
 
       const mapped = Array.isArray(payload?.results)
-        ? payload.results.map((item: unknown) => {
-            const typedItem = item as {
-              candidateId?: string;
-              voteCount?: number;
-            };
-            return {
-              candidateId: String(typedItem.candidateId || "").trim(),
-              voteCount: Number(typedItem.voteCount || 0),
-            };
-          }).filter((item) => item.candidateId)
+        ? payload.results
+            .map((item: unknown) => {
+              const typedItem = item as {
+                candidateId?: string;
+                voteCount?: number;
+              };
+              return {
+                candidateId: String(typedItem.candidateId || "").trim(),
+                voteCount: Number(typedItem.voteCount || 0),
+              };
+            })
+            .filter((item) => item.candidateId)
         : [];
 
       setResults(mapped);
@@ -127,7 +131,7 @@ export default function ResultPage() {
       const message = typedError?.response?.data?.message;
       const errorMessage = Array.isArray(message)
         ? message.join(", ")
-        : message || typedError?.message || "ບໍ່ສາມາດໂຫຼດຂໍ້ມູນຜົນການ. ກະລຸນາລອງອີກຄັ້ງ";
+        : message || typedError?.message || "ບໍ່ສາມາດໂຫຼດຂໍ້ມູນຜົນການໄດ້";
       setResultsError(errorMessage);
       setResults([]);
       setParticipation(null);
@@ -163,6 +167,7 @@ export default function ResultPage() {
       void loadRoom(roomCode, { silent: true });
       if (nextStatus === "closed") {
         void fetchResults(payloadRoomId);
+        return;
       }
 
       if (
@@ -173,6 +178,7 @@ export default function ResultPage() {
         setResults([]);
         setResultsError("");
         setParticipation(null);
+        router.replace(`/vote-room/${roomCode}`);
       }
     },
     onRoomResultsReset: (payload) => {
@@ -188,7 +194,7 @@ export default function ResultPage() {
   }
 
   if (roomLoading || resultsLoading) {
-    return <LoadingState label={"ກຳລັງໂຫຼດຜົນ..."} />;
+    return <LoadingState label="ກຳລັງໂຫຼດຜົນ..." />;
   }
 
   if (roomInfo?.status === "closed" && resultsError) {
@@ -197,7 +203,7 @@ export default function ResultPage() {
         <RoomHeader />
         <div className="mx-auto max-w-lg px-4 py-6">
           <ErrorState
-            title={"ບໍ່ສາມາດໂຫຼດຜົນໄດ້"}
+            title="ບໍ່ສາມາດໂຫຼດຜົນໄດ້"
             description={resultsError}
             action={
               <button
@@ -208,7 +214,7 @@ export default function ResultPage() {
                 }}
                 className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
               >
-                {"ລອງອີກຄັ້ງ"}
+                ລອງອີກຄັ້ງ
               </button>
             }
           />
@@ -218,21 +224,7 @@ export default function ResultPage() {
   }
 
   if (roomInfo && roomInfo.status !== "closed") {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <RoomHeader />
-        <div className="flex min-h-[60vh] items-center justify-center px-4">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">
-              {"ຫ້ອງຍັງບໍ່ປິດ"}
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              {"ຜົນຈະສະແດງເມື່ອຫ້ອງຖືກປິດ"}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const currentUserHasVoted = Boolean(voteRecord);
@@ -250,9 +242,7 @@ export default function ResultPage() {
                 : "ຫ້ອງປິດແລ້ວ ແລະບໍ່ພົບຂໍ້ມູນການສົ່ງຄະແນນຂອງທ່ານ"
             }
             statusLabel={
-              currentUserHasVoted
-                ? "ໂຫວດແລ້ວ"
-                : "ງດອອກສຽງ / ບໍ່ໄດ້ກົດໂຫວດ"
+              currentUserHasVoted ? "ໂຫວດແລ້ວ" : "ງດອອກສຽງ / ບໍ່ໄດ້ໂຫວດ"
             }
             tone={currentUserHasVoted ? "success" : "warning"}
             detailLines={
@@ -263,9 +253,7 @@ export default function ResultPage() {
                       timeStyle: "short",
                     })}`,
                   ]
-                : [
-                    "ຂໍ້ມູນນີ້ຈະຊ່ວຍໃຫ້ແອັດມິນຮູ້ວ່າຄົນນີ້ບໍ່ໄດ້ສົ່ງຄະແນນ",
-                  ]
+                : ["ບໍ່ພົບການສົ່ງຄະແນນຂອງທ່ານ"]
             }
           />
         ) : null}
@@ -295,7 +283,7 @@ export default function ResultPage() {
 
         {results.length === 0 ? (
           <EmptyState
-            title={"ຍັງບໍ່ມີຜົນ"}
+            title="ຍັງບໍ່ມີຜົນ"
             description={
               roomInfo?.status === "closed"
                 ? "ບໍ່ມີຄະແນນໃດໆໃນຫ້ອງນີ້"
