@@ -160,7 +160,7 @@ export default function VoteRoomPage() {
       setCheckedInRoomCode(roomInfo.roomCode);
     }
 
-    await apiClient.post(`/rooms/${roomInfo.id}/vote`, {
+    return apiClient.post(`/rooms/${roomInfo.id}/vote`, {
       userId: user.id,
       selectedCandidateIds: selectedIds,
     });
@@ -289,9 +289,12 @@ export default function VoteRoomPage() {
   async function handleConfirmVote() {
     setSubmitting(true);
     setSubmitError("");
+    let submittedAt = new Date().toISOString();
 
     try {
-      await submitVoteRequest();
+      const response = await submitVoteRequest();
+      submittedAt =
+        String(response?.data?.submittedAt || "").trim() || submittedAt;
     } catch (err: unknown) {
       const message = toApiErrorMessage(err);
       const statusCode = Number(
@@ -311,7 +314,7 @@ export default function VoteRoomPage() {
         userId: user!.id,
         roomId: roomInfo!.id,
         selectedIds,
-        submittedAt: new Date().toISOString(),
+        submittedAt,
       });
       setShowConfirm(false);
       setSubmitError("");
