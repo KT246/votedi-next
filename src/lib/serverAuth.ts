@@ -23,10 +23,6 @@ function readBearerToken(authorization: string | null): string {
     return match?.[1] || '';
 }
 
-export function readDeviceId(request: Request): string {
-    return String(request.headers.get('x-device-id') || '').trim();
-}
-
 export async function getAuthContext(request: Request, requiredRole?: 'admin' | 'user'): Promise<AuthContext | null> {
     const token = readBearerToken(request.headers.get('authorization'));
     if (!token) return null;
@@ -40,18 +36,12 @@ export async function getAuthContext(request: Request, requiredRole?: 'admin' | 
         const db = getAdminDb();
         if (payload.role === 'user') {
             const userId = String(payload.id || '').trim();
-            const deviceId = readDeviceId(request);
-            if (!userId || !deviceId) {
+            if (!userId) {
                 return null;
             }
 
             const user = await getUserById(userId);
             if (!user) {
-                return null;
-            }
-
-            const activeDeviceId = String(user.activeDeviceId || '').trim();
-            if (activeDeviceId && activeDeviceId !== deviceId) {
                 return null;
             }
         }

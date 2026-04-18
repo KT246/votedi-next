@@ -162,6 +162,10 @@ function countEligibleUsers(room: Pick<RoomRecord, "allowedUsers">): number {
   return Array.from(new Set((room.allowedUsers || []).map((entry) => normalizeString(entry)).filter(Boolean))).length;
 }
 
+function resolveRequiredSelectionCount(room: Pick<RoomRecord, "maxSelection">): number {
+  return Math.max(Number(room.maxSelection || 1), 1);
+}
+
 function resolveRoomDeadline(room: Pick<RoomRecord, "startTime" | "endTime" | "timeMode" | "durationMinutes">): Date | null {
   if (room.endTime instanceof Date) {
     return Number.isNaN(room.endTime.getTime()) ? null : room.endTime;
@@ -852,10 +856,18 @@ export async function submitVote(payload: {
     const allowedCandidateIds = new Set(
       (room.candidates || []).map((candidate) => normalizeString(candidate.id)).filter(Boolean),
     );
-    if (
-      selectedIds.length > Math.max(Number(room.maxSelection || 1), 1) ||
-      selectedIds.some((entry) => !allowedCandidateIds.has(entry))
-    ) {
+    const requiredSelectionCount = resolveRequiredSelectionCount(room);
+    if (selectedIds.length !== requiredSelectionCount) {
+      return {
+        ok: false,
+        code: "INVALID_OPTION",
+        message: `Please select exactly ${requiredSelectionCount} candidate${requiredSelectionCount === 1 ? "" : "s"}`,
+        status: 400,
+        room,
+      } satisfies SubmitVoteResult;
+    }
+
+    if (selectedIds.some((entry) => !allowedCandidateIds.has(entry))) {
       return {
         ok: false,
         code: "INVALID_OPTION",

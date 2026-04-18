@@ -62,6 +62,20 @@ function resolveCountdownTargetMs(roomInfo: {
   return null;
 }
 
+function getRequiredSelectionCount(roomInfo: {
+  maxSelection?: number | null;
+} | null): number {
+  return Math.max(Number(roomInfo?.maxSelection || 1), 1);
+}
+
+function getSelectionRequirementMessage(requiredSelectionCount: number): string {
+  if (requiredSelectionCount <= 1) {
+    return "ກະລຸນາເລືອກ 1 ຄົນກ່ອນສົ່ງຄະແນນ";
+  }
+
+  return `ກະລຸນາເລືອກໃຫ້ຄົບ ${requiredSelectionCount} ຄົນກ່ອນສົ່ງຄະແນນ`;
+}
+
 function RoomStatePanel({
   title,
   description,
@@ -132,6 +146,11 @@ export default function VoteRoomPage() {
   async function submitVoteRequest() {
     if (!roomInfo || !user) {
       throw new Error("ຂໍ້ມູນຫ້ອງ ຫຼື ຜູ້ໃຊ້ບໍ່ຄົບ");
+    }
+
+    const requiredSelectionCount = getRequiredSelectionCount(roomInfo);
+    if (selectedIds.length !== requiredSelectionCount) {
+      throw new Error(getSelectionRequirementMessage(requiredSelectionCount));
     }
 
     if (checkedInRoomCode !== roomInfo.roomCode) {
@@ -321,8 +340,12 @@ export default function VoteRoomPage() {
   }
 
   function handleOpenConfirm() {
-    if (selectedIds.length === 0) {
-      showAlertDialog("ກະລຸນາເລືອກຢ່າງນ້ອຍ 1 ຄົນກ່ອນສົ່ງ", "ຈຳເປັນຕ້ອງເລືອກ");
+    const requiredSelectionCount = getRequiredSelectionCount(roomInfo);
+    if (selectedIds.length !== requiredSelectionCount) {
+      showAlertDialog(
+        getSelectionRequirementMessage(requiredSelectionCount),
+        "ຈຳເປັນຕ້ອງເລືອກ",
+      );
       return;
     }
 
@@ -420,8 +443,9 @@ export default function VoteRoomPage() {
     );
   }
 
-  const maxSelection = roomInfo.maxSelection || 1;
+  const maxSelection = getRequiredSelectionCount(roomInfo);
   const hasSelected = selectedIds.length > 0;
+  const hasRequiredSelection = selectedIds.length === maxSelection;
   const atMax = selectedIds.length >= maxSelection;
 
   return (
@@ -468,7 +492,7 @@ export default function VoteRoomPage() {
 
         {maxSelection > 1 ? (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            {`ທ່ານເລືອກໄດ້ສູງສຸດ ${maxSelection} ຄົນ`}
+            {`ທ່ານຕ້ອງເລືອກໃຫ້ຄົບ ${maxSelection} ຄົນກ່ອນສົ່ງຄະແນນ`}
           </div>
         ) : null}
 
@@ -503,12 +527,14 @@ export default function VoteRoomPage() {
         <div className="sticky bottom-0 border-t border-slate-200 bg-slate-50 pb-5 pt-3">
           <button
             onClick={handleOpenConfirm}
-            disabled={!hasSelected}
+            disabled={!hasRequiredSelection}
             className="w-full rounded-xl bg-indigo-600 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {hasSelected
+            {hasRequiredSelection
               ? "ສົ່ງຄະແນນ" + ` (${selectedIds.length})`
-              : "ເລືອກຜູ້ສະໝັກເພື່ອດຳເນີນການ"}
+              : hasSelected
+                ? `ເລືອກໃຫ້ຄົບ ${maxSelection} ຄົນ (${selectedIds.length}/${maxSelection})`
+                : "ເລືອກຜູ້ສະໝັກເພື່ອດຳເນີນການ"}
           </button>
         </div>
       </div>
